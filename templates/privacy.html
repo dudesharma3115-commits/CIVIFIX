@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy · CivicFix{% endblock %}
+{% set body %}
+<article class="legal">
+  <div class="notice" style="margin-bottom:20px"><b>Draft for your organisation to finalise.</b> Replace the bracketed details and have a lawyer review this text (including DPDP Act 2023 requirements) before launch.</div>
+  <h1>Privacy Policy</h1>
+  <h3>What we collect</h3>
+  <p>Your name, email, district and password (stored only as a secure hash). When you report an issue: its description, category, area, optional landmark, a map location if you pin one, and any photo you upload. Photos are re-processed on upload to remove hidden location (EXIF) data. We also keep security logs (sign-ins, actions on cases, IP address).</p>
+  <h3>Why we use it</h3>
+  <p>To verify your account, route your report to the correct government department, notify you of progress, prevent misuse, and report anonymous statistics.</p>
+  <h3>Who can see it</h3>
+  <p>Only the people handling your case: your district administrators and the officers of the department your report is forwarded to. Other citizens see approved issues as anonymous map pins, with no names and no photos.</p>
+  <h3>How long we keep it</h3>
+  <p>Reports are kept as a public-interest record of civic issues. [Set your retention period, for example 3 years after resolution.] Security logs are kept for [12 months].</p>
+  <h3>Your rights</h3>
+  <p>In <b>My account</b> you can download your data and delete your account. Deleting removes your name, email and notifications; past reports stay on record without your identity. For other requests, write to {{ contact_email }}.</p>
+  <h3>Security</h3>
+  <p>Encrypted connections (HTTPS), hashed passwords, private photo storage, rate limiting and an audit log of administrative actions.</p>
+  <h3>Grievance officer</h3>
+  <p>[Name, designation, address] · {{ contact_email }}</p>
+</article>
+{% endset %}
+{% block content %}{{ body }}{% endblock %}
+{% block pubcontent %}{{ body }}{% endblock %}

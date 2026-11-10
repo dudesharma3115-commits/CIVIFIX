@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Verify email · CivicFix{% endblock %}
+{% block pubcontent %}
+<section class="auth">
+  <div class="auth-aside"><span class="kicker">One quick step</span><h1>Check your email</h1><p>We sent a 6-digit code to <b>{{ email or 'your email' }}</b>. Enter it to activate your account. It expires in 10 minutes.</p></div>
+  <div class="auth-card">
+    <form method="post">{{ csrf_input() }}<input type="hidden" name="email" value="{{ email }}">
+      <h2>Verify email</h2>
+      <label>6-digit code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus class="code-input"></label>
+      <button class="btn btn-primary btn-full btn-lg" type="submit">Verify {{ icon('check', 17) }}</button>
+    </form>
+    <form method="post" action="{{ url_for('verify_resend') }}" style="margin-top:12px">{{ csrf_input() }}<input type="hidden" name="email" value="{{ email }}"><button class="btn btn-ghost btn-full" type="submit">Send a new code</button></form>
+    <p class="auth-switch">Wrong email? <a href="{{ url_for('register') }}">Start again</a></p>
+  </div>
+</section>
+{% endblock %}

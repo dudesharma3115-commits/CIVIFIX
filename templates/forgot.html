@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Reset password · CivicFix{% endblock %}
+{% block pubcontent %}
+<section class="auth">
+  <div class="auth-aside"><span class="kicker">Account recovery</span><h1>Forgot your password?</h1><p>Enter your email and we'll send a 6-digit code to reset it.</p></div>
+  <form class="auth-card" method="post">{{ csrf_input() }}<h2>Reset password</h2>
+    <label>Email<input name="email" type="email" required autocomplete="email"></label>
+    <button class="btn btn-primary btn-full btn-lg" type="submit">Send code {{ icon('mail', 17) }}</button>
+    <p class="auth-switch"><a href="{{ url_for('login') }}">Back to sign in</a></p></form>
+</section>
+{% endblock %}

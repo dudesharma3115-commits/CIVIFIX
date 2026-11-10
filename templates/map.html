@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set use_map = true %}
+{% block title %}Live map · CivicFix{% endblock %}
+{% block heading %}Live issue map{% endblock %}
+{% block content %}
+<div class="page-head boot" style="margin-bottom:12px"><div><span class="kicker">{% if me.role == 'citizen' %}Around {{ me.district }}{% else %}{{ me.district or 'All districts' }}{% endif %}</span><h2>Every issue, on the map</h2>
+  <p>Pulsing pins are still open; red rings mean critical. Tap a pin for details.</p></div>
+  <div class="map-chips" id="statusChips"></div></div>
+<div class="map-chips boot" id="catChips2" style="margin-bottom:12px;--i:1"></div>
+<section class="panel boot" style="--i:2"><div class="fullmap"><div class="map-box" id="bigMap"></div></div></section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/livemap.js') }}"></script>{% endblock %}

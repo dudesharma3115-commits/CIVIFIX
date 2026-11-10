@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}CivicFix India: report it, approve it, fix it{% endblock %}
+{% block pubcontent %}
+<section class="hero">
+  <div>
+    <span class="kicker">Civic command center for Tamil Nadu</span>
+    <h1>Report a dead streetlight. <span>Watch TNEB fix it.</span></h1>
+    <p class="lead">Snap a photo and drop a pin. Your district admin verifies it, forwards it to the right department, and you follow every step live until it's fixed.</p>
+    <div class="hero-cta"><a class="btn btn-primary btn-lg" href="{{ url_for('register') }}">Report an issue {{ icon('arrow', 18) }}</a><a class="btn btn-ghost btn-lg" href="{{ url_for('login') }}">Sign in to the dashboard</a></div>
+    <form class="track-box" action="{{ url_for('track') }}" method="get">{{ icon('search', 18) }}<input name="ticket" placeholder="Have a ticket number? e.g. CF-261109-AB12CD" aria-label="Ticket number" maxlength="30"><button class="btn btn-ghost btn-sm" type="submit">Track</button></form>
+    <div class="hero-stats"><div><b>{{ stats.reported }}</b><small>Reports</small></div><div><b>{{ stats.resolved }}</b><small>Resolved</small></div><div><b>{{ stats.districts }}</b><small>Districts</small></div></div>
+  </div>
+  <div class="console" aria-hidden="true">
+    <div class="console-top"><span>CITY COMMAND CENTER</span><span class="live-pill"><i></i> LIVE</span></div>
+    <div class="city">
+      <svg viewBox="0 0 520 330" preserveAspectRatio="xMidYMid slice">
+        <g fill="none" stroke-width="9" stroke-linecap="round"><path class="road-b" d="M-10 250 C90 200 130 290 220 220 S380 130 540 170"/><path class="road-b" d="M60 -10 C110 80 190 60 230 150 S320 290 360 345"/><path class="road-b" d="M-10 90 C120 130 190 30 300 70 S460 120 540 40"/></g>
+        <g fill="none" stroke-width="3" stroke-linecap="round"><path class="road-g flowline" d="M-10 250 C90 200 130 290 220 220 S380 130 540 170"/><path class="road-r flowline" d="M60 -10 C110 80 190 60 230 150 S320 290 360 345"/><path class="road-g flowline" d="M-10 90 C120 130 190 30 300 70 S460 120 540 40"/></g>
+      </svg>
+      <span class="pin-abs" style="left:24%;top:46%"><span class="pin live crit" style="--c:#ffb020;display:block"></span></span>
+      <span class="pin-abs" style="left:56%;top:30%"><span class="pin live" style="--c:#a78bfa;display:block"></span></span>
+      <span class="pin-abs" style="left:70%;top:58%"><span class="pin live" style="--c:#4c7dff;display:block"></span></span>
+      <span class="pin-abs" style="left:40%;top:72%"><span class="pin" style="--c:#2ee59d;display:block"></span></span>
+    </div>
+    <div class="relay">
+      <div style="--k:0">{{ icon('camera', 20) }}<b>Reported</b>by citizen</div><div style="--k:1">{{ icon('shield', 20) }}<b>Approved</b>by admin</div>
+      <div style="--k:2">{{ icon('bolt', 20) }}<b>TNEB</b>notified</div><div style="--k:3">{{ icon('check', 20) }}<b>Resolved</b>with proof</div>
+    </div>
+  </div>
+</section>
+<section class="steps3">
+  <div>{{ icon('camera', 26) }}<h3>Report with proof</h3><p>Photo, map pin and a short note. It takes under a minute.</p></div>
+  <div>{{ icon('shield', 26) }}<h3>Verified, then routed</h3><p>District admins approve real issues and send each one to the right department.</p></div>
+  <div>{{ icon('pulse', 26) }}<h3>Tracked to the fix</h3><p>Live notifications and a visible timeline until the officer marks it resolved.</p></div>
+</section>
+{% endblock %}

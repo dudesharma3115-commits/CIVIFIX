@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% from "_m.html" import panel %}
+{% block title %}Users · CivicFix{% endblock %}
+{% block heading %}{{ 'Users & roles' if me.role == 'superadmin' else 'Department officers' }}{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">Access control</span><h2>{{ 'Users & roles' if me.role == 'superadmin' else 'Officers in ' ~ me.district }}</h2>
+  <p>{% if me.role == 'superadmin' %}Create district admins, department officers and other super admins.{% else %}Add the department officers (TNEB, Water Board, Highways…) who will receive cases forwarded from your district.{% endif %}</p></div></div>
+<div class="two-col">
+  <section class="panel flush boot" style="--i:1"><div class="scroll-x"><table class="tbl">
+    <thead><tr><th>Name</th><th>Role</th><th>District</th><th>Department</th></tr></thead>
+    <tbody>{% for u in rows %}<tr>
+      <td><div class="who"><span class="avatar">{{ u.name[:1]|upper }}</span><div><b>{{ u.name }}</b><div class="muted" style="font-size:12px">{{ u.email }}</div></div></div></td>
+      <td>{{ role_labels[u.role] }}</td><td>{{ u.district or 'All' }}</td><td>{{ agencies[u.department].short if u.department else '—' }}</td>
+    </tr>{% endfor %}</tbody></table></div></section>
+  {% call panel('Add account', 'violet', 'plus', i=2) %}
+    <form method="post" id="userForm">{{ csrf_input() }}
+      <label>Full name<input name="name" required maxlength="100"></label>
+      <label>Email<input name="email" type="email" required></label>
+      <label>Temporary password<input name="password" type="password" minlength="8" required placeholder="At least 8 characters"></label>
+      {% if me.role == 'superadmin' %}
+      <label>Role<select name="role" id="roleSel"><option value="staff">Department officer</option><option value="district_admin">District admin</option><option value="superadmin">Super admin</option></select></label>
+      <label id="fDistrict">District<select name="district"><option value="">Choose district</option>{% for d in districts %}<option>{{ d }}</option>{% endfor %}</select></label>
+      {% endif %}
+      <label id="fDept">Department<select name="department"><option value="">Choose department</option>{% for d in departments %}<option value="{{ d }}">{{ agencies[d].name }}</option>{% endfor %}</select></label>
+      <button class="btn btn-primary btn-full" type="submit">Create account</button>
+    </form>
+  {% endcall %}
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Sign in · CivicFix{% endblock %}
+{% block pubcontent %}
+<section class="auth">
+  <div class="auth-aside"><span class="kicker">One platform, four roles</span><h1>Sign in to the command center</h1>
+    <p>Citizens report. Admins approve. Departments fix. Everyone sees progress.</p>
+    <div class="roles"><div>{{ icon('camera', 19) }} Citizens report issues with photos and a map pin</div><div>{{ icon('shield', 19) }} District admins approve and route to departments</div><div>{{ icon('bolt', 19) }} Officers at TNEB, Water Board and more resolve them</div><div>{{ icon('chart', 19) }} Super admins watch every district</div></div></div>
+  <form class="auth-card" method="post">{{ csrf_input() }}
+    <h2>Sign in</h2><p class="muted" style="margin:0 0 6px">Use your CivicFix account.</p>
+    <label>Email<input name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
+    <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
+    <div style="text-align:right;margin-top:-6px"><a class="muted" href="{{ url_for('forgot') }}" style="font-size:13px">Forgot password?</a></div>
+    <button class="btn btn-primary btn-full btn-lg" type="submit">Continue {{ icon('arrow', 17) }}</button>
+    {% if demo_mode %}<div class="demo-box"><small>Demo accounts · tap to fill</small><div class="chips">
+      <button type="button" data-demo="citizen@civicfix.in">Citizen</button><button type="button" data-demo="chennai.admin@civicfix.in">District admin</button>
+      <button type="button" data-demo="tneb.staff@civicfix.in">TNEB officer</button><button type="button" data-demo="roads.staff@civicfix.in">Roads officer</button><button type="button" data-demo="admin@civicfix.in">Super admin</button></div></div>{% endif %}
+    <p class="auth-switch">New here? <a href="{{ url_for('register') }}">Create a citizen account</a></p>
+  </form>
+</section>
+{% endblock %}

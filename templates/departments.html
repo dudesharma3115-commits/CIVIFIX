@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Departments · CivicFix{% endblock %}
+{% block heading %}Departments{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">{{ me.district or 'All districts' }}</span><h2>Department performance</h2>
+  <p>See who is holding open cases, who is fast, and where no officer is registered yet.</p></div>
+  <div class="actions"><a class="btn btn-ghost" href="{{ url_for('admin_users') }}">{{ icon('users', 17) }} Manage officers</a></div></div>
+<section class="panel flush boot" style="--i:1"><div class="scroll-x"><table class="tbl">
+  <thead><tr><th>Department</th><th class="num">Officers</th><th class="num">Open</th><th class="num">Critical</th><th class="num">Resolved</th><th class="num">Avg. fix time</th></tr></thead>
+  <tbody>{% for s in stats %}<tr>
+    <td><div class="who"><span class="row-ico" style="--c:{{ s.color }}">{{ icon(s.icon, 19) }}</span><div><b>{{ s.short }}</b><div class="muted" style="font-size:12px">{{ s.name }}</div></div></div></td>
+    <td class="num">{{ s.officers }}{% if not s.officers and s.open %} <span class="warn-tag">none registered</span>{% endif %}</td>
+    <td class="num">{{ s.open }}</td>
+    <td class="num" style="{{ 'color:var(--red)' if s.critical }}">{{ s.critical }}</td>
+    <td class="num" style="color:var(--green)">{{ s.resolved }}</td>
+    <td class="num">{{ (s.avg_hours ~ ' h') if s.avg_hours is not none else '—' }}</td>
+  </tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

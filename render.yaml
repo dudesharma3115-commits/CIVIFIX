@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: civicfix
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 2 --threads 4 --timeout 60 --access-logfile -
+    healthCheckPath: /healthz
+    envVars:
+      - key: CIVICFIX_ENV
+        value: production
+      - key: CIVICFIX_SECRET
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CIVICFIX_STORAGE
+        value: supabase
+      - key: DATABASE_URL
+        sync: false          # paste your Supabase/Neon Postgres connection string
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: civicfix-media
+      - key: CIVICFIX_ADMIN_EMAIL
+        sync: false
+      - key: CIVICFIX_ADMIN_PASSWORD
+        sync: false
+      - key: CIVICFIX_CONTACT_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false

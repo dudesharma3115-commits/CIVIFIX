@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+civicfix.db
+instance/
+static/uploads/

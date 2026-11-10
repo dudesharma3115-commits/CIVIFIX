@@ -1,0 +1,26 @@
+{% macro badge(s) %}<span class="status status-{{ s|lower|replace(' ','-') }}">{{ s }}</span>{% endmacro %}
+{% macro prio(p) %}<span class="prio prio-{{ p|lower }}">{{ p }}</span>{% endmacro %}
+{# HUD panel — use with {% call panel('Title','violet','chart') %}...{% endcall %} #}
+{% macro panel(title, tone='blue', ico=none, sub='', i=0, cls='', tid='') %}
+<section class="panel tone-{{ tone }} boot {{ cls }}" style="--i:{{ i }}">
+  <header class="panel-head">{% if ico %}{{ icon(ico, 19) }}{% endif %}<h3 {% if tid %}id="{{ tid }}"{% endif %}>{{ title }}</h3>{% if sub %}<small>{{ sub }}</small>{% endif %}</header>
+  <div class="panel-body">{{ caller() }}</div>
+</section>
+{% endmacro %}
+
+{# Animated case pipeline. who=false hides officer names (public tracking page). #}
+{% macro flow(status, steps, fwd='', who=true) %}
+{% set rejected = status == 'Rejected' %}
+{% set seq = ['Submitted','Rejected'] if rejected else ['Submitted','Approved','Forwarded','In Progress','Resolved'] %}
+{% set labels = {'Submitted':'Reported','Approved':'Approved','Forwarded':'Forwarded','In Progress':'In progress','Resolved':'Resolved','Rejected':'Rejected'} %}
+{% set ico = {'Submitted':'camera','Approved':'shield','Forwarded':'send','In Progress':'wrench','Resolved':'check','Rejected':'x'} %}
+{% set cur = seq.index(status) %}
+<div class="flow {{ 'rejected' if rejected }} {{ 'is-done' if status == 'Resolved' }}" style="--n:{{ seq|length }}">
+  <div class="flow-line"><i style="--p:{{ ((cur / (seq|length - 1)) * 100)|round }}%"></i></div>
+  {% for s in seq %}{% set t = steps.get(s) if steps else none %}
+  <div class="flow-step {{ 'done' if loop.index0 < cur }} {{ 'current' if loop.index0 == cur and s not in ['Resolved','Rejected'] }} {{ 'finished' if s == 'Resolved' and loop.index0 == cur }} {{ 'bad' if s == 'Rejected' }} {{ 'wait' if loop.index0 > cur }}">
+    <div class="flow-node">{{ icon(ico[s], 24) }}</div><b>{{ labels[s] }}</b>
+    <small>{% if s == 'Forwarded' and fwd and loop.index0 <= cur %}to {{ fwd }}{% elif t and loop.index0 <= cur and who %}{{ t.by or 'CivicFix' }}{% elif loop.index0 > cur %}Pending{% endif %}{% if t and loop.index0 <= cur %}<br>{{ t.at[5:16]|replace('T', ' ') }}{% endif %}</small>
+  </div>{% endfor %}
+</div>
+{% endmacro %}

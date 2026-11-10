@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Notifications · CivicFix{% endblock %}
+{% block heading %}Notifications{% endblock %}
+{% block page_class %}narrow{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">Inbox</span><h2>Notifications</h2></div>
+  <form method="post" action="{{ url_for('notifications_read') }}">{{ csrf_input() }}<button class="btn btn-ghost" type="submit">{{ icon('check', 16) }} Mark all as read</button></form></div>
+<section class="panel flush boot" style="--i:1">
+  {% for n in rows %}{% set c = {'action':'#a78bfa','success':'#2ee59d','warn':'#ffb020','info':'#35e0ff'}[n.kind] %}
+  <a class="row" style="--c:{{ c }}" href="{{ url_for('complaint_detail', complaint_id=n.complaint_id) if n.complaint_id else '#' }}">
+    <span class="row-ico">{{ icon('bell', 18) }}</span><span class="row-main"><b style="white-space:normal">{{ n.message }}</b><small>{{ n.created_at[:16]|replace('T', ' ') }}</small></span>
+    {% if not n.is_read %}<span class="warn-tag">new</span>{% endif %}
+  </a>
+  {% else %}<div class="empty"><h3>You're all caught up</h3><p>Updates about your cases will appear here.</p></div>{% endfor %}
+</section>
+{% endblock %}

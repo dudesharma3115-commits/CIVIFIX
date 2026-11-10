@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Audit log · CivicFix{% endblock %}
+{% block heading %}Audit log{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">Accountability</span><h2>Audit log</h2><p>Sign-ins and every action taken on cases and accounts. The latest 300 entries.</p></div></div>
+<div class="filter-bar"><input id="auditFilter" placeholder="Filter by user, action or ticket…" aria-label="Filter audit log"></div>
+<section class="panel flush boot" style="--i:1"><div class="scroll-x"><table class="tbl" id="auditTbl">
+  <thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><td style="white-space:nowrap">{{ r.ts[:19]|replace('T',' ') }}</td><td>{{ r.actor_name or '—' }}</td><td><span class="status">{{ r.action }}</span></td><td>{{ r.target }}</td><td class="muted">{{ r.detail }}</td><td class="muted">{{ r.ip }}</td></tr>{% else %}<tr><td colspan="6" class="muted">No entries yet.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/audit.js') }}"></script>{% endblock %}

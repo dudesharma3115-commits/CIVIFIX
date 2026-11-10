@@ -1,0 +1,6 @@
+Flask>=3.0,<4
+Werkzeug>=3.0,<4
+Pillow>=10.3
+gunicorn>=22.0
+psycopg2-binary>=2.9
+click>=8.1

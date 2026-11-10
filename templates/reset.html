@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}New password · CivicFix{% endblock %}
+{% block pubcontent %}
+<section class="auth">
+  <div class="auth-aside"><span class="kicker">Almost done</span><h1>Choose a new password</h1><p>Enter the code we emailed to <b>{{ email or 'you' }}</b> and pick a new password.</p></div>
+  <form class="auth-card" method="post">{{ csrf_input() }}<input type="hidden" name="email" value="{{ email }}"><h2>New password</h2>
+    <label>6-digit code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required class="code-input"></label>
+    <label>New password<input name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="8+ characters, with a letter and a number"></label>
+    <button class="btn btn-primary btn-full btn-lg" type="submit">Update password {{ icon('check', 17) }}</button>
+    <p class="auth-switch"><a href="{{ url_for('forgot') }}">Send a new code</a></p></form>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set use_map = true %}
+{% block title %}Report an issue · CivicFix{% endblock %}
+{% block heading %}Report an issue{% endblock %}
+{% block page_class %}narrow{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">Citizen reporting</span><h2>Spot it. Snap it. Send it.</h2>
+  <p>Add a photo and drop a pin. Your district admin reviews it, then it goes straight to the department that fixes it, such as TNEB for electricity.</p></div></div>
+<form id="reportForm" class="panel form-card boot" style="--i:1" method="post" enctype="multipart/form-data">
+  {{ csrf_input() }}
+  <div class="form-sec"><span class="num">1</span><div><b>Which department should fix it?</b><small>Choose the closest match.</small></div></div>
+  <div class="tiles" role="radiogroup" aria-label="Category">
+    {% for d in departments %}{% set a = agencies[d] %}
+    <label class="tile" style="--c:{{ a.color }}"><input type="radio" name="category" value="{{ d }}" required {{ 'checked' if request.form.get('category') == d }}><span>{{ icon(a.icon, 22) }}<b>{{ a.short }}</b><small>{{ d }}</small></span></label>
+    {% endfor %}
+  </div>
+  <div class="notice route-hint" id="routeHint" hidden></div>
+
+  <div class="form-sec"><span class="num">2</span><div><b>What's happening?</b><small>A clear title and a few details help officers act faster.</small></div></div>
+  <label>Title<input name="title" maxlength="140" placeholder="e.g. Street light not working on 3rd Main Road" value="{{ request.form.get('title', '') }}" required></label>
+  <label>Details<textarea name="description" rows="4" placeholder="How long has it been like this? Is anyone at risk?" required>{{ request.form.get('description', '') }}</textarea></label>
+
+  <div class="form-sec"><span class="num">3</span><div><b>Where is it?</b><small>Tap the map to drop a pin, or use your current location.</small></div></div>
+  <div class="form-grid">
+    <label>District<select id="districtSel" name="district" required><option value="">Choose district</option>{% for d in districts %}<option {{ 'selected' if (request.form.get('district') or me.district) == d }}>{{ d }}</option>{% endfor %}</select></label>
+    <label>Area / locality<input name="area" placeholder="e.g. Adyar" value="{{ request.form.get('area', '') }}" required></label>
+  </div>
+  <label>Landmark or street <span class="optional">optional</span><input name="address" placeholder="Near the bus stop, opposite the school…" value="{{ request.form.get('address', '') }}"></label>
+  <div class="picker" id="pickerMap"></div>
+  <div class="picker-bar"><button class="btn btn-ghost btn-sm" type="button" id="locateBtn">{{ icon('locate', 16) }} Use my current location</button><span id="locStatus">No pin yet. The district centre is used if you skip this.</span></div>
+  <input type="hidden" id="latitude" name="latitude"><input type="hidden" id="longitude" name="longitude">
+
+  <div class="form-sec"><span class="num">4</span><div><b>Add a photo</b><small>Photos help the admin verify the report quickly. Optional.</small></div></div>
+  <div class="upload">
+    <div class="upload-prev">{{ icon('image', 30) }}</div>
+    <div><b>Show us the problem</b><div class="muted upload-name">JPG, PNG or WEBP, up to 8 MB. You can drag and drop too.</div>
+      <div class="upload-actions"><label class="btn btn-ghost btn-sm" style="margin:0" for="photoInput">{{ icon('image', 16) }} Choose photo</label><label class="btn btn-ghost btn-sm" style="margin:0" for="camInput">{{ icon('camera', 16) }} Take photo</label></div></div>
+    <input id="photoInput" type="file" name="photo" accept="image/png,image/jpeg,image/webp">
+    <input id="camInput" type="file" accept="image/*" capture="environment">
+  </div>
+  <div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('dashboard') }}">Cancel</a><button class="btn btn-primary btn-lg" type="submit">Submit report {{ icon('send', 17) }}</button></div>
+</form>
+{% endblock %}

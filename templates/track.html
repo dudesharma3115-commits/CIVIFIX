@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from "_m.html" import badge, flow %}
+{% block title %}Track a report · CivicFix{% endblock %}
+{% set body %}
+<section class="track-page">
+  <span class="kicker">Public status check</span><h1 class="track-h">Where is my report?</h1>
+  <p class="muted" style="max-width:520px">Enter the ticket number from your confirmation. We show the status and dates only; personal details stay private.</p>
+  <form class="track-box big" method="get" action="{{ url_for('track') }}">{{ icon('search', 18) }}<input name="ticket" value="{{ ticket }}" placeholder="CF-261109-AB12CD" aria-label="Ticket number" maxlength="30" required><button class="btn btn-primary" type="submit">Track</button></form>
+  {% if info %}
+  <div class="panel" style="margin-top:22px"><div class="panel-body">
+    <div class="detail-title" style="margin-top:0"><div><span class="kicker">{{ info.ticket }}</span><h2 style="font-size:26px">{{ agencies[info.category].name }}</h2><div class="muted">{{ info.district }} · {{ info.area }}</div></div><div>{{ badge(info.status) }}</div></div>
+    {{ flow(info.status, steps, agencies[info.forwarded_to].short if info.forwarded_to else '', false) }}
+    <p class="muted" style="margin:16px 0 0;font-size:13px">Last update: {{ info.updated_at[:16]|replace('T', ' ') }}</p>
+  </div></div>
+  {% endif %}
+</section>
+{% endset %}
+{% block content %}{{ body }}{% endblock %}
+{% block pubcontent %}{{ body }}{% endblock %}

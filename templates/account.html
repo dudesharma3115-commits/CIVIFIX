@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_m.html" import panel %}
+{% block title %}My account · CivicFix{% endblock %}
+{% block heading %}My account{% endblock %}
+{% block page_class %}narrow{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">{{ role_labels[me.role] }}{% if me.district %} · {{ me.district }}{% endif %}</span><h2>{{ me.name }}</h2><p>{{ me.email }}</p></div></div>
+{% if me.must_change_password %}<div class="notice bad" style="margin-bottom:16px"><b>Set a new password to continue.</b> Your account was created by an administrator with a temporary password.</div>{% endif %}
+<div class="two-col">
+  {% call panel('Change password', 'violet', 'lock', i=1) %}
+    <form method="post">{{ csrf_input() }}
+      <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
+      <label>New password<input name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="8+ characters, with a letter and a number"></label>
+      <button class="btn btn-primary btn-full" type="submit">Update password</button>
+    </form>
+  {% endcall %}
+  <div class="stack">
+    {% call panel('Your data', 'teal', 'download', i=2) %}
+      <p class="hint">Download everything we hold about you: your profile, reports and notifications.</p>
+      <a class="btn btn-ghost btn-full" href="{{ url_for('account_export') }}">{{ icon('download', 17) }} Download my data</a>
+    {% endcall %}
+    {% if me.role == 'citizen' %}
+    {% call panel('Delete account', 'red', 'alert', i=3) %}
+      <p class="hint">Removes your name, email and notifications. Past reports stay on record without your identity. This can't be undone.</p>
+      <form method="post" action="{{ url_for('account_delete') }}">{{ csrf_input() }}
+        <label>Confirm your password<input name="password" type="password" required autocomplete="current-password"></label>
+        <button class="btn btn-danger btn-full" type="submit">Delete my account</button></form>
+    {% endcall %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

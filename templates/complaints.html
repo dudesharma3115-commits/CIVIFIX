@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% from "_m.html" import badge %}
+{% block title %}Reports · CivicFix{% endblock %}
+{% block content %}
+<div class="page-head boot">
+  <div><span class="kicker">{% if me.role == 'citizen' %}Your reports{% elif me.role == 'staff' %}Department cases{% else %}Case register{% endif %}</span>
+    <h2>{% if me.role == 'citizen' %}Everything you've reported{% elif me.role == 'staff' %}Cases for {{ agencies[me.department].short }}{% else %}Civic issue register{% endif %}</h2>
+    <p>{% if me.role in ['district_admin','superadmin'] %}Approve new reports, then forward them to the department that will fix them.{% else %}Open any case to see its full journey from report to fix.{% endif %}</p></div>
+  {% if me.role == 'citizen' %}<div class="actions"><a class="btn btn-primary" href="{{ url_for('new_complaint') }}">{{ icon('plus', 17) }} New report</a></div>{% endif %}
+</div>
+<div class="tabs boot" style="--i:1">
+  <a class="tab {{ 'on' if not active_status }}" href="{{ url_for('complaints') }}">All <b>{{ total }}</b></a>
+  {% for s in statuses %}{% if counts.get(s) or active_status == s %}
+  <a class="tab {{ 'on' if active_status == s }} {{ 'attn' if s == 'Submitted' and me.role in ['district_admin','superadmin'] and active_status != s }}" href="{{ url_for('complaints', status=s) }}">{{ s }} <b>{{ counts.get(s, 0) }}</b></a>
+  {% endif %}{% endfor %}
+</div>
+<div class="filter-bar"><input id="reportSearch" placeholder="Filter by ticket, title, area or department…" aria-label="Filter reports"><span class="muted">{{ rows|length }} shown</span></div>
+<section class="panel flush boot" style="--i:2">
+  {% for r in rows %}{% set a = agencies[r.category] %}
+  <a class="row searchable" href="{{ url_for('complaint_detail', complaint_id=r.id) }}" style="--c:{{ a.color }}">
+    <span class="row-ico">{{ icon(a.icon, 19) }}</span>
+    <span class="row-main"><b>{{ r.title }}</b><small>{{ r.ticket }} · {{ r.district }} / {{ r.area }} · {{ a.short }}</small></span>
+    <span class="row-aside">{{ badge(r.status) }}<span>{{ r.created_at[:10] }}</span></span>
+  </a>
+  {% else %}
+  <div class="empty"><h3>No reports here</h3><p>{% if me.role == 'citizen' %}Report your first issue and watch it move through the pipeline.{% else %}Nothing matches this view yet.{% endif %}</p></div>
+  {% endfor %}
+</section>
+{% endblock %}

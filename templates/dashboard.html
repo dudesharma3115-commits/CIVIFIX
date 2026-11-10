@@ -1,0 +1,64 @@
+{% extends "base.html" %}{% from "_m.html" import panel %}
+{% set use_map = true %}
+{% block title %}Command Center · CivicFix{% endblock %}
+{% block content %}
+<div class="cc-actions boot" style="--i:0">
+  <p>Welcome back, <b>{{ me.name.split()[0] }}</b>.
+    {% if me.role == 'citizen' %}See what's happening near you, or report something new.
+    {% elif me.role == 'staff' %}These are the cases forwarded to {{ agencies[me.department].name }}.
+    {% elif me.role == 'district_admin' %}Approve reports and route them to the right department.
+    {% else %}Every district, department and case in one view.{% endif %}</p>
+  <div class="actions">
+    {% if me.role == 'citizen' %}<a class="btn btn-primary" href="{{ url_for('new_complaint') }}">{{ icon('plus', 17) }} Report an issue</a>
+    {% elif me.role in ['district_admin','superadmin'] %}<a class="btn btn-primary" href="{{ url_for('complaints', status='Submitted') }}">{{ icon('shield', 17) }} Approval queue{% if pending_badge %} ({{ pending_badge }}){% endif %}</a>
+    {% else %}<a class="btn btn-primary" href="{{ url_for('complaints') }}">{{ icon('wrench', 17) }} My cases</a>{% endif %}
+  </div>
+</div>
+
+<div class="cc">
+  <div class="cc-col">
+    {% call panel('Report Trend', 'violet', 'chart', sub='Last 7 days', i=1) %}
+      <div id="trendChart"></div><div class="lg-row" id="trendLegend"></div><div id="trendStats"></div>
+    {% endcall %}
+    {% call panel('Case Pipeline', 'green', 'list', sub='From report to fix', i=2) %}
+      <div class="pipe-row" id="pipeRow"></div><div class="chips" id="catChips"></div>
+    {% endcall %}
+  </div>
+
+  <div class="cc-map boot" style="--i:0">
+    <div class="panel map-panel">
+      <div class="map-box" id="ccMap"></div>
+      <div class="map-overlay" style="top:14px;left:14px;right:120px"><div class="map-chips" id="legend" aria-label="Filter pins by status"></div></div>
+      <div class="map-overlay" style="top:14px;right:14px"><span class="live-tag"><i class="dot-live"></i> LIVE</span></div>
+      <div class="map-overlay" id="callouts" style="top:62px;right:14px;width:215px"></div>
+      <div class="map-overlay kp" style="left:14px;bottom:14px"><div class="kpis" id="kpiStrip"></div></div>
+    </div>
+  </div>
+
+  <div class="cc-col">
+    {% call panel('Service Level', 'teal', 'clock', sub='Resolution speed', i=3) %}
+      <div class="gauge-row"><div id="gaugeRate" style="flex:1;text-align:center"></div><div id="ringSla"></div></div>
+      <div id="deptRows"></div>
+      {% if me.role == 'superadmin' %}<span class="lbl" style="margin-top:14px">Busiest districts · resolved / total</span><div id="distRows"></div>{% endif %}
+    {% endcall %}
+    {% call panel('Critical Alerts', 'red', 'alert', sub='Needs attention', i=4) %}
+      <div class="split"><div id="gaugeCrit" style="text-align:center"></div><div id="critSide" style="min-width:96px"></div></div>
+      <div id="alertList"></div>
+    {% endcall %}
+  </div>
+</div>
+
+<div class="cc-bottom">
+  {% call panel('Queue', 'blue', 'shield', i=5, cls='flush', tid='queueTitle') %}
+    <div class="rows" id="queueRows"></div>
+    <a class="footer-link" href="{{ url_for('complaints') }}">Open all reports {{ icon('arrow', 15) }}</a>
+  {% endcall %}
+  {% call panel('Live Activity', 'amber', 'pulse', sub='Updates as they happen', i=6, cls='flush') %}
+    <div id="feedRows"></div>
+  {% endcall %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ nonce }}">window.__DASH__ = {{ data|tojson }};</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

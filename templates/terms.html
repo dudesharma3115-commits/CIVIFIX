@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Terms of Use · CivicFix{% endblock %}
+{% set body %}
+<article class="legal">
+  <div class="notice" style="margin-bottom:20px"><b>Draft for your organisation to finalise.</b> Have it reviewed by a lawyer before launch.</div>
+  <h1>Terms of Use</h1>
+  <h3>Using CivicFix</h3>
+  <p>Use CivicFix to report real civic problems in your area. Give accurate details and photos of the issue itself. Do not upload photos of people's faces or private property interiors, or anything unlawful.</p>
+  <h3>Not for emergencies</h3>
+  <p>CivicFix is not an emergency service. For fire, medical or police emergencies call <b>112</b>. For a live electrical hazard, also contact your local electricity office directly.</p>
+  <h3>Misuse</h3>
+  <p>False, abusive or repeated spam reports may be rejected and accounts suspended. Administrators can reject reports that are duplicates or outside civic scope.</p>
+  <h3>No guarantee of resolution</h3>
+  <p>CivicFix routes reports to the responsible departments and tracks progress. Fix times depend on the departments. [Add the departments' service-level commitments if any.]</p>
+  <h3>Contact</h3><p>{{ contact_email }}</p>
+</article>
+{% endset %}
+{% block content %}{{ body }}{% endblock %}
+{% block pubcontent %}{{ body }}{% endblock %}

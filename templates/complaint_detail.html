@@ -1,0 +1,122 @@
+{% extends "base.html" %}{% from "_m.html" import badge, prio, panel, flow %}
+{% set use_map = true %}
+{% set colors = {'Submitted':'#ffb020','Approved':'#35e0ff','Forwarded':'#a78bfa','In Progress':'#4c7dff','Resolved':'#2ee59d','Rejected':'#ff4d6a'} %}
+{% block title %}{{ item.ticket }} · CivicFix{% endblock %}
+{% block heading %}Case {{ item.ticket }}{% endblock %}
+{% block content %}
+{% set ag = agencies[item.forwarded_to or item.category] %}
+{% set rejected = item.status == 'Rejected' %}
+{% set seq = ['Submitted','Rejected'] if rejected else ['Submitted','Approved','Forwarded','In Progress','Resolved'] %}
+{% set labels = {'Submitted':'Reported','Approved':'Approved','Forwarded':'Forwarded','In Progress':'In progress','Resolved':'Resolved','Rejected':'Rejected'} %}
+{% set ico = {'Submitted':'camera','Approved':'shield','Forwarded':'send','In Progress':'wrench','Resolved':'check','Rejected':'x'} %}
+{% set cur = seq.index(item.status) %}
+<a class="back-link" href="{{ url_for('complaints') }}">&larr; All reports</a>
+<div class="detail-title boot">
+  <div><span class="kicker">{{ item.ticket }} · {{ item.district }}</span><h2>{{ item.title }}</h2><div class="muted">{{ icon(ag.icon, 15) }} {{ ag.name }} · {{ item.area }}</div></div>
+  <div>{{ badge(item.status) }} &nbsp; {{ prio(item.priority) }}</div>
+</div>
+
+<section class="panel boot" style="--i:1"><div class="panel-body">{{ flow(item.status, steps, ag.short if item.forwarded_to else '') }}</div></section>
+
+<div class="detail-grid">
+  <div class="stack">
+    {% call panel('Report details', 'violet', 'list', i=2) %}
+      <p style="margin:0;color:#d3def5;line-height:1.7">{{ item.description }}</p>
+      {% if item.photo or item.resolution_photo %}
+      <div class="photos">
+        {% if item.photo %}<figure class="photo" style="margin:0"><figcaption>Reported</figcaption><img src="{{ media(item.photo) }}" alt="Photo of the reported issue"></figure>{% endif %}
+        {% if item.resolution_photo %}<figure class="photo proof" style="margin:0"><figcaption>After the fix</figcaption><img src="{{ media(item.resolution_photo) }}" alt="Photo showing the issue fixed"></figure>{% endif %}
+      </div>
+      {% else %}<div class="no-photo">{{ icon('image', 26) }}No photo attached</div>{% endif %}
+      <div class="meta-grid">
+        <div><small>Reported by</small><b>{{ owner.name if me.role != 'citizen' else 'You' }}</b></div>
+        <div><small>Reported on</small><b>{{ item.created_at[:16]|replace('T', ' ') }}</b></div>
+        <div><small>Department</small><b>{{ ag.short }}</b></div>
+        <div><small>Assigned officer</small><b>{{ assigned.name if assigned else ('Awaiting assignment' if item.forwarded_to else '—') }}</b></div>
+        {% if approver %}<div><small>Approved by</small><b>{{ approver.name }}</b></div>{% endif %}
+      </div>
+      {% if item.address %}<p class="muted" style="margin:0 0 12px">{{ icon('pin', 15) }} {{ item.address }}</p>{% endif %}
+      {% if item.latitude and item.longitude %}
+      <div class="mini-map" id="miniMap" data-lat="{{ item.latitude }}" data-lng="{{ item.longitude }}" data-status="{{ item.status }}" data-priority="{{ item.priority }}" data-title="{{ item.title }}" data-category="{{ item.category }}" data-area="{{ item.area }}"></div>
+      {% else %}<div class="notice">No GPS pin on this report. The admin map shows it near the {{ item.district }} centre.</div>{% endif %}
+    {% endcall %}
+  </div>
+
+  <div class="stack">
+    {# ---------- role-based actions ---------- #}
+    {% if is_admin and item.status == 'Submitted' %}
+    {% call panel('Review & approve', 'amber', 'shield', sub='Admin action', i=2, cls='action-panel') %}
+      <p class="hint">Check the photo and details. Approve to verify it, and forward it to the department in one step.</p>
+      <form method="post" action="{{ url_for('approve_complaint', cid=item.id) }}">{{ csrf_input() }}
+        <div class="form-grid">
+          <label>Priority<select name="priority">{% for p in ['Low','Medium','High','Critical'] %}<option {{ 'selected' if item.priority == p }}>{{ p }}</option>{% endfor %}</select></label>
+          <label>Forward to<select name="forward_to" data-forward data-officer="#officerA" data-btn="#aprBtn"><option value="">Approve only (forward later)</option>{% for d in departments %}<option value="{{ d }}" {{ 'selected' if item.category == d }}>{{ agencies[d].short }}</option>{% endfor %}</select></label>
+        </div>
+        <label>Officer <span class="optional">optional</span><select name="assigned_to" id="officerA"><option value="">Notify every officer in the department</option>{% for s in staff %}<option value="{{ s.id }}" data-dept="{{ s.department }}">{{ s.name }}</option>{% endfor %}</select></label>
+        <label>Note <span class="optional">optional</span><textarea name="note" rows="2" placeholder="Anything the department should know…"></textarea></label>
+        <div class="btn-row"><button class="btn btn-primary" id="aprBtn" type="submit" data-with="Approve &amp; forward to" data-without="Approve only">Approve</button><button class="btn btn-danger" type="button" id="rejectToggle">{{ icon('x', 17) }} Reject</button></div>
+      </form>
+      <form class="reject-box" id="rejectBox" hidden method="post" action="{{ url_for('reject_complaint', cid=item.id) }}">{{ csrf_input() }}
+        <label>Reason for rejecting<textarea name="note" rows="2" placeholder="The citizen will see this." required></textarea></label>
+        <button class="btn btn-danger btn-full" type="submit">Confirm rejection</button>
+      </form>
+    {% endcall %}
+    {% elif is_admin and item.status in ['Approved','Forwarded'] %}
+    {% call panel('Forward to department' if item.status == 'Approved' else 'Re-route', 'amber', 'send', sub='Admin action', i=2, cls='action-panel') %}
+      <p class="hint">{% if item.status == 'Approved' %}Approved. Choose who should fix it and they'll be notified instantly.{% else %}Currently with {{ ag.name }}. You can send it to a different department or officer.{% endif %}</p>
+      <form method="post" action="{{ url_for('forward_complaint', cid=item.id) }}">{{ csrf_input() }}
+        <label>Department<select name="forward_to" data-forward data-officer="#officerB" data-btn="#fwdBtn" required>{% for d in departments %}<option value="{{ d }}" {{ 'selected' if (item.forwarded_to or item.category) == d }}>{{ agencies[d].name }}</option>{% endfor %}</select></label>
+        <label>Officer <span class="optional">optional</span><select name="assigned_to" id="officerB"><option value="">Notify every officer in the department</option>{% for s in staff %}<option value="{{ s.id }}" data-dept="{{ s.department }}" {{ 'selected' if item.assigned_to == s.id }}>{{ s.name }}</option>{% endfor %}</select></label>
+        <label>Note <span class="optional">optional</span><textarea name="note" rows="2"></textarea></label>
+        <button class="btn btn-primary btn-full" id="fwdBtn" type="submit" data-with="Forward to" data-without="Forward">Forward</button>
+      </form>
+    {% endcall %}
+    {% endif %}
+
+    {% if me.role in ['staff','district_admin','superadmin'] and item.status in ['Forwarded','In Progress'] %}
+    {% call panel('Field work', 'green', 'wrench', sub=ag.short, i=3, cls='action-panel') %}
+      {% if item.status == 'Forwarded' %}<div class="notice" style="margin-bottom:8px">New case from the district admin. Start work to let the citizen know someone is on it.</div>{% endif %}
+      <form method="post" action="{{ url_for('progress_complaint', cid=item.id) }}">{{ csrf_input() }}
+        <label>Progress note <span class="optional">optional</span><input name="note" placeholder="Crew dispatched, materials arranged…"></label>
+        <button class="btn btn-ghost btn-full" type="submit">{{ icon('wrench', 17) }} {{ 'Start work' if item.status == 'Forwarded' else 'Post progress update' }}</button>
+      </form>
+      <hr style="border:0;border-top:1px solid var(--line2);margin:16px 0 4px">
+      <form id="proofForm" method="post" action="{{ url_for('resolve_complaint', cid=item.id) }}" enctype="multipart/form-data">{{ csrf_input() }}
+        <label>What was done to fix it?<textarea name="note" rows="2" placeholder="Replaced the damaged cable and restored supply." required></textarea></label>
+        <div class="upload" style="grid-template-columns:auto 1fr">
+          <div class="upload-prev">{{ icon('camera', 26) }}</div>
+          <div><b>Proof photo</b><div class="muted upload-name">Optional but recommended</div>
+            <div class="upload-actions"><label class="btn btn-ghost btn-sm" style="margin:0" for="proofInput">{{ icon('image', 16) }} Choose</label><label class="btn btn-ghost btn-sm" style="margin:0" for="proofCam">{{ icon('camera', 16) }} Take</label></div></div>
+          <input id="proofInput" type="file" name="proof" accept="image/png,image/jpeg,image/webp"><input id="proofCam" type="file" accept="image/*" capture="environment">
+        </div>
+        <button class="btn btn-green btn-full" style="margin-top:14px" type="submit">{{ icon('check', 17) }} Mark as resolved</button>
+      </form>
+    {% endcall %}
+    {% endif %}
+
+    {% if is_owner and item.status == 'Resolved' %}
+    {% call panel('Is it fixed?', 'green', 'check', sub='Your call', i=3, cls='action-panel') %}
+      {% if item.confirmed_at %}<div class="notice ok">You confirmed this fix on {{ item.confirmed_at[:10] }}. Thank you.</div>
+      {% else %}
+      <p class="hint">Check the "after" photo and the spot itself. Your confirmation closes the loop; if it isn't fixed, send it back.</p>
+      <form method="post" action="{{ url_for('confirm_fixed', cid=item.id) }}">{{ csrf_input() }}<button class="btn btn-green btn-full" type="submit">{{ icon('check', 17) }} Yes, it's fixed</button></form>
+      {% if can_reopen %}
+      <form method="post" action="{{ url_for('reopen_complaint', cid=item.id) }}" style="margin-top:10px">{{ csrf_input() }}
+        <label>Still broken? Tell us what's wrong<textarea name="note" rows="2" maxlength="500" required placeholder="e.g. Light works for an hour, then goes off again."></textarea></label>
+        <button class="btn btn-danger btn-full" type="submit">{{ icon('undo', 17) }} Not fixed: reopen</button></form>
+      {% endif %}{% endif %}
+    {% endcall %}
+    {% endif %}
+
+    {% if rejected %}<div class="notice bad"><b>Rejected.</b> {{ item.resolution_note }}</div>
+    {% elif item.status == 'Resolved' %}<div class="notice ok"><b>Resolved{% if item.resolved_at %} on {{ item.resolved_at[:16]|replace('T', ' ') }}{% endif %}.</b> {{ item.resolution_note }}</div>
+    {% elif me.role == 'citizen' %}<div class="notice">{% if item.status == 'Submitted' %}Waiting for your district admin to review this report.{% elif item.status == 'Approved' %}Approved. It will be sent to the department shortly.{% elif item.status == 'Forwarded' %}With {{ ag.name }}. They'll start work soon.{% else %}{{ ag.short }} is working on it right now.{% endif %} We'll notify you at every step.</div>{% endif %}
+
+    {% call panel('Case timeline', 'blue', 'clock', i=4) %}
+      <div class="timeline">{% for h in history %}
+        <div class="tl-item" style="--c:{{ colors[h.status] }}"><b>{{ h.status }}</b><p>{{ h.note }}</p><small>{{ h.actor_name or 'CivicFix' }} · {{ h.created_at[:16]|replace('T', ' ') }}</small></div>
+      {% endfor %}</div>
+    {% endcall %}
+  </div>
+</div>
+{% endblock %}
