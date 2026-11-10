@@ -61,6 +61,7 @@
   window.__ICONS__ = {{ icons|tojson }};
   window.__AGENCIES__ = {{ agencies|tojson }};
   window.__CENTERS__ = {{ centers|tojson }};
+  window.__TILES__ = {{ tiles|tojson }};
 </script>
 {% if use_map %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>

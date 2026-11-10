@@ -501,3 +501,6 @@ select{color-scheme:dark}textarea{resize:vertical}
 .check input{width:18px;height:18px;margin:2px 0 0;flex:none;accent-color:#35e0ff}
 .check a{color:var(--cyan)}
 .code-input{font:600 28px var(--display);letter-spacing:10px;text-align:center}
+
+/* Dark map look for light tile sets (OpenStreetMap): invert + tint, no API key needed */
+.tiles-dark{filter:invert(1) hue-rotate(195deg) brightness(.92) contrast(.92) saturate(.55)}

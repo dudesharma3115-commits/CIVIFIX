@@ -44,6 +44,12 @@ DEMO_MODE = os.environ.get("CIVICFIX_DEMO", "0" if PROD else "1") == "1"
 REQUIRE_VERIFY = os.environ.get("CIVICFIX_REQUIRE_VERIFY", "1" if mailer.configured() else "0") == "1"
 SLA_HOURS = 72
 REOPEN_DAYS = 14
+# Map tiles. Default: OpenStreetMap (no API key). For heavy traffic use a provider such as MapTiler/Stadia
+# (set CIVICFIX_TILE_URL to their URL with your key, and CIVICFIX_TILE_DARK=0 if their style is already dark).
+TILE_URL = os.environ.get("CIVICFIX_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+TILES = {"url": TILE_URL, "dark": os.environ.get("CIVICFIX_TILE_DARK", "1") == "1",
+         "attribution": os.environ.get("CIVICFIX_TILE_ATTRIBUTION", "&copy; OpenStreetMap contributors")}
+_tile_host = re.sub(r"^(https?://)([^/]+).*$", r"\1\2", TILE_URL.replace("{s}", "*").replace("{r}", ""))
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$")
 DUMMY_HASH = generate_password_hash("not-a-real-password")
 
@@ -176,7 +182,7 @@ def secure_headers(resp):
         "default-src 'self'", f"script-src 'self' 'nonce-{nonce}' https://unpkg.com",
         "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
-        "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://unpkg.com",
+        f"img-src 'self' data: blob: {_tile_host} https://unpkg.com",
         "connect-src 'self'", "manifest-src 'self'", "worker-src 'self'",
         "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'"])
     resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -213,7 +219,7 @@ def inject_globals():
     return {"me": user, "districts": DISTRICTS, "departments": DEPARTMENTS, "statuses": STATUSES,
             "agencies": AGENCIES, "role_labels": ROLE_LABELS, "icons": ICONS, "centers": DISTRICT_CENTERS,
             "unread": unread, "pending_badge": pending_count(user), "demo_mode": DEMO_MODE,
-            "nonce": g.get("nonce", ""), "reopen_days": REOPEN_DAYS,
+            "nonce": g.get("nonce", ""), "reopen_days": REOPEN_DAYS, "tiles": TILES,
             "contact_email": os.environ.get("CIVICFIX_CONTACT_EMAIL", "contact@your-domain.in")}
 
 

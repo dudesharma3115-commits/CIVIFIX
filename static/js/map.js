@@ -1,8 +1,7 @@
 /* CivicFix — Leaflet helpers (dark map, animated status pins, location picker) */
 (function () {
   const COLORS = window.CF ? CF.STATUS_COLOR : {};
-  const TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-  const ATTR = '&copy; OpenStreetMap contributors &copy; CARTO';
+  const T = window.__TILES__ || { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', dark: true, attribution: '&copy; OpenStreetMap contributors' };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function base(el, o) {
@@ -13,7 +12,11 @@
     const map = L.map(el, { zoomControl: false, scrollWheelZoom: o.scroll !== false, attributionControl: true, worldCopyJump: true })
       .setView(o.center || [11.1271, 78.6569], o.zoom || 8);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.tileLayer(TILES, { maxZoom: 19, subdomains: 'abcd', attribution: ATTR }).addTo(map);
+    let errors = 0;
+    const layer = L.tileLayer(T.url, { maxZoom: 19, subdomains: 'abc', attribution: T.attribution, className: T.dark ? 'tiles-dark' : '' }).addTo(map);
+    layer.on('tileerror', () => {
+      if (++errors === 8 && window.CF) CF.toast('Map background could not load.', 'warn', 'Pins still work. Check your connection or the tile provider settings.');
+    });
     return map;
   }
 
