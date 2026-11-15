@@ -4,7 +4,7 @@
 {% block title %}{{ item.ticket }} · CivicFix{% endblock %}
 {% block heading %}Case {{ item.ticket }}{% endblock %}
 {% block content %}
-{% set ag = agencies[item.forwarded_to or item.category] %}
+{% set ag = agency(item.state, item.forwarded_to or item.category) %}
 {% set rejected = item.status == 'Rejected' %}
 {% set seq = ['Submitted','Rejected'] if rejected else ['Submitted','Approved','Forwarded','In Progress','Resolved'] %}
 {% set labels = {'Submitted':'Reported','Approved':'Approved','Forwarded':'Forwarded','In Progress':'In progress','Resolved':'Resolved','Rejected':'Rejected'} %}
@@ -50,7 +50,7 @@
       <form method="post" action="{{ url_for('approve_complaint', cid=item.id) }}">{{ csrf_input() }}
         <div class="form-grid">
           <label>Priority<select name="priority">{% for p in ['Low','Medium','High','Critical'] %}<option {{ 'selected' if item.priority == p }}>{{ p }}</option>{% endfor %}</select></label>
-          <label>Forward to<select name="forward_to" data-forward data-officer="#officerA" data-btn="#aprBtn"><option value="">Approve only (forward later)</option>{% for d in departments %}<option value="{{ d }}" {{ 'selected' if item.category == d }}>{{ agencies[d].short }}</option>{% endfor %}</select></label>
+          <label>Forward to<select name="forward_to" data-forward data-officer="#officerA" data-btn="#aprBtn"><option value="">Approve only (forward later)</option>{% for d in departments %}<option value="{{ d }}" {{ 'selected' if item.category == d }}>{{ agency(item.state, d).short }}</option>{% endfor %}</select></label>
         </div>
         <label>Officer <span class="optional">optional</span><select name="assigned_to" id="officerA"><option value="">Notify every officer in the department</option>{% for s in staff %}<option value="{{ s.id }}" data-dept="{{ s.department }}">{{ s.name }}</option>{% endfor %}</select></label>
         <label>Note <span class="optional">optional</span><textarea name="note" rows="2" placeholder="Anything the department should know…"></textarea></label>
@@ -65,7 +65,7 @@
     {% call panel('Forward to department' if item.status == 'Approved' else 'Re-route', 'amber', 'send', sub='Admin action', i=2, cls='action-panel') %}
       <p class="hint">{% if item.status == 'Approved' %}Approved. Choose who should fix it and they'll be notified instantly.{% else %}Currently with {{ ag.name }}. You can send it to a different department or officer.{% endif %}</p>
       <form method="post" action="{{ url_for('forward_complaint', cid=item.id) }}">{{ csrf_input() }}
-        <label>Department<select name="forward_to" data-forward data-officer="#officerB" data-btn="#fwdBtn" required>{% for d in departments %}<option value="{{ d }}" {{ 'selected' if (item.forwarded_to or item.category) == d }}>{{ agencies[d].name }}</option>{% endfor %}</select></label>
+        <label>Department<select name="forward_to" data-forward data-officer="#officerB" data-btn="#fwdBtn" required>{% for d in departments %}<option value="{{ d }}" {{ 'selected' if (item.forwarded_to or item.category) == d }}>{{ agency(item.state, d).name }}</option>{% endfor %}</select></label>
         <label>Officer <span class="optional">optional</span><select name="assigned_to" id="officerB"><option value="">Notify every officer in the department</option>{% for s in staff %}<option value="{{ s.id }}" data-dept="{{ s.department }}" {{ 'selected' if item.assigned_to == s.id }}>{{ s.name }}</option>{% endfor %}</select></label>
         <label>Note <span class="optional">optional</span><textarea name="note" rows="2"></textarea></label>
         <button class="btn btn-primary btn-full" id="fwdBtn" type="submit" data-with="Forward to" data-without="Forward">Forward</button>
@@ -73,7 +73,7 @@
     {% endcall %}
     {% endif %}
 
-    {% if me.role in ['staff','district_admin','superadmin'] and item.status in ['Forwarded','In Progress'] %}
+    {% if me.role in ['staff','district_admin','state_admin','superadmin'] and item.status in ['Forwarded','In Progress'] %}
     {% call panel('Field work', 'green', 'wrench', sub=ag.short, i=3, cls='action-panel') %}
       {% if item.status == 'Forwarded' %}<div class="notice" style="margin-bottom:8px">New case from the district admin. Start work to let the citizen know someone is on it.</div>{% endif %}
       <form method="post" action="{{ url_for('progress_complaint', cid=item.id) }}">{{ csrf_input() }}

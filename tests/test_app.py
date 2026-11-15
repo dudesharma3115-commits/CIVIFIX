@@ -58,6 +58,11 @@ class T(unittest.TestCase):
         cls.roads = login("roads.staff@civicfix.in")[0]
         cls.sup = login("admin@civicfix.in")[0]
         cls.cbe = login("cbe.admin@civicfix.in")[0]
+        cls.tnstate = login("tn.state@civicfix.in")[0]
+        cls.upstate = login("up.state@civicfix.in")[0]
+        cls.upadm = login("lucknow.admin@civicfix.in")[0]
+        cls.upcit = login("aman@civicfix.in")[0]
+        cls.upstaff = login("uppcl.staff@civicfix.in")[0]
 
     def test_01_public_and_headers(self):
         c = A.app.test_client()
@@ -75,10 +80,10 @@ class T(unittest.TestCase):
         self.assertEqual(A.app.test_client().post("/login", data={"email": "a", "password": "b"}).status_code, 400)
 
     def test_03_all_role_pages(self):
-        for cl in (self.cit, self.adm, self.tneb, self.sup, self.cbe):
+        for cl in (self.cit, self.adm, self.tneb, self.sup, self.cbe, self.tnstate, self.upstate, self.upadm, self.upcit, self.upstaff):
             for p in ["/dashboard", "/api/dashboard", "/map", "/api/markers", "/complaints", "/api/notifications", "/notifications", "/account", "/account/export"]:
                 self.assertEqual(cl.get(p).status_code, 200, p)
-        for cl in (self.adm, self.sup):
+        for cl in (self.adm, self.sup, self.tnstate, self.upstate, self.upadm):
             for p in ["/admin/departments", "/admin/users"]:
                 self.assertEqual(cl.get(p).status_code, 200, p)
         self.assertEqual(self.sup.get("/admin/audit").status_code, 200)
@@ -92,7 +97,7 @@ class T(unittest.TestCase):
         self.assertEqual(d["by_status"]["Resolved"], 3)
         self.assertIsNotNone(d["avg_hours"])
         self.assertEqual(len(d["departments"]), 7)
-        self.assertEqual(self.sup.get("/api/dashboard").get_json()["total"], 15)
+        self.assertEqual(self.sup.get("/api/dashboard").get_json()["total"], 18)
 
     def test_05_scoping(self):
         url = self.adm.get("/api/dashboard").get_json()["queue"][0]["url"]
@@ -104,7 +109,7 @@ class T(unittest.TestCase):
         t = meta_csrf(self.cit, "/complaints/new")
         r = self.cit.post("/complaints/new", content_type="multipart/form-data", data={
             "_csrf": t, "category": "Electricity", "title": "Pole sparking", "description": "Sparks at night",
-            "district": "Chennai", "area": "Adyar", "latitude": "13.0067", "longitude": "80.2570",
+            "state": "TN", "district": "Chennai", "area": "Adyar", "latitude": "13.0067", "longitude": "80.2570",
             "photo": (jpeg_with_exif(), "x.jpg")})
         self.assertEqual(r.status_code, 302)
         loc = r.headers["Location"]
@@ -158,7 +163,7 @@ class T(unittest.TestCase):
 
     def test_07_bad_uploads(self):
         t = meta_csrf(self.cit, "/complaints/new")
-        base = {"_csrf": t, "category": "Roads & Highways", "title": "x", "description": "y", "district": "Chennai", "area": "A"}
+        base = {"_csrf": t, "category": "Roads & Highways", "title": "x", "description": "y", "state": "TN", "district": "Chennai", "area": "A"}
         for name, blob in (("a.png", b"not an image at all"), ("a.jpg", b"<?php echo 1; ?>" * 50), ("a.exe", b"MZ" + b"0" * 50)):
             r = self.cit.post("/complaints/new", content_type="multipart/form-data", data={**base, "photo": (io.BytesIO(blob), name)})
             self.assertEqual(r.status_code, 200, name)
@@ -166,7 +171,7 @@ class T(unittest.TestCase):
 
     def test_08_reject_requires_reason(self):
         t = meta_csrf(self.cit, "/complaints/new")
-        r = self.cit.post("/complaints/new", data={"_csrf": t, "category": "Roads & Highways", "title": "dup", "description": "dup", "district": "Chennai", "area": "Guindy"})
+        r = self.cit.post("/complaints/new", data={"_csrf": t, "category": "Roads & Highways", "title": "dup", "description": "dup", "state": "TN", "district": "Chennai", "area": "Guindy"})
         cid = int(r.headers["Location"].rsplit("/", 1)[1])
         ta = meta_csrf(self.adm, "/dashboard")
         self.adm.post(f"/complaints/{cid}/reject", data={"_csrf": ta, "note": ""})
@@ -177,7 +182,7 @@ class T(unittest.TestCase):
     def test_09_register_otp_and_login_lockout(self):
         c = A.app.test_client()
         t = csrf_from(c.get("/register").get_data(as_text=True))
-        form = {"_csrf": t, "name": "Ravi Kumar", "email": "ravi@example.com", "district": "Chennai", "password": "short", "agree": "on"}
+        form = {"_csrf": t, "name": "Ravi Kumar", "email": "ravi@example.com", "state": "TN", "district": "Chennai", "password": "short", "agree": "on"}
         self.assertIn("at least 8", c.post("/register", data=form).get_data(as_text=True))
         form["password"] = "password123"
         self.assertIn("too easy", c.post("/register", data=form).get_data(as_text=True))
@@ -229,7 +234,7 @@ class T(unittest.TestCase):
     def test_11_admin_created_user_must_change_password(self):
         t = meta_csrf(self.sup, "/admin/users")
         self.sup.post("/admin/users", data={"_csrf": t, "name": "Water Officer", "email": "w2@example.com", "password": "Temp-Pass-77",
-                                           "role": "staff", "district": "Chennai", "department": "Water Supply"})
+                                           "role": "staff", "state": "TN", "district": "Chennai", "department": "Water Supply"})
         cl, r = login("w2@example.com", "Temp-Pass-77")
         self.assertEqual(r.status_code, 302)
         self.assertIn("/account", cl.get("/dashboard").headers["Location"])           # forced to change it
@@ -238,7 +243,7 @@ class T(unittest.TestCase):
         self.assertEqual(cl.get("/dashboard").status_code, 200)
         # district admin can only add officers to their own district
         t = meta_csrf(self.adm, "/admin/users")
-        self.adm.post("/admin/users", data={"_csrf": t, "name": "Sneaky", "email": "s@example.com", "password": "Sneaky-Pass-1", "role": "superadmin", "district": "Madurai"})
+        self.adm.post("/admin/users", data={"_csrf": t, "name": "Sneaky", "email": "s@example.com", "password": "Sneaky-Pass-1", "role": "superadmin", "state": "TN", "district": "Madurai"})
         self.assertEqual(q("SELECT role, district FROM users WHERE email='s@example.com'"), [])
         self.adm.post("/admin/users", data={"_csrf": t, "name": "Ok Officer", "email": "o@example.com", "password": "Okay-Pass-123", "department": "Sanitation"})
         self.assertEqual(q("SELECT role, district FROM users WHERE email='o@example.com'"), [("staff", "Chennai")])
@@ -260,6 +265,159 @@ class T(unittest.TestCase):
         t = csrf_from(c.get("/login").get_data(as_text=True))
         r = c.post("/login?next=//evil.com", data={"email": "citizen@civicfix.in", "password": PW, "_csrf": t})
         self.assertEqual(r.headers["Location"], "/dashboard")
+
+    # ------------------------------------------------------------------ multi-state
+    def test_20_geography_data(self):
+        d = A.geo.get_geo()
+        self.assertEqual(len(d["states"]), 36)
+        self.assertGreater(sum(len(v) for v in d["districts"].values()), 700)
+        self.assertIn("Lucknow", A.geo.district_names("UP"))
+        self.assertNotIn("Lucknow", A.geo.district_names("TN"))
+        self.assertTrue(A.geo.valid_pair("TN", "Chennai"))
+        self.assertFalse(A.geo.valid_pair("UP", "Chennai"))
+        self.assertEqual(A.geo.agency("TN", "Electricity")["short"], "TNEB")
+        self.assertEqual(A.geo.agency("UP", "Electricity")["short"], "UPPCL")
+        self.assertEqual(A.geo.agency("BR", "Electricity")["short"], "Electricity")     # generic fallback
+        self.assertEqual(A.geo.center("UP", "Lucknow")[2], 7)                            # state zoom (no district centre stored)
+
+    def test_21_state_isolation(self):
+        up = self.upadm.get("/api/dashboard").get_json()
+        self.assertEqual(up["total"], 3)
+        self.assertEqual(up["state"], "UP")
+        self.assertEqual(round(up["center"][0]), 27)
+        tn_url = self.adm.get("/api/dashboard").get_json()["queue"][0]["url"]
+        self.assertEqual(self.upadm.get(tn_url).status_code, 403)
+        self.assertEqual(self.upstate.get(tn_url).status_code, 403)
+        self.assertEqual(self.upcit.get(tn_url).status_code, 403)
+        self.assertEqual(self.tnstate.get(tn_url).status_code, 200)
+        self.assertEqual(self.tnstate.get("/api/dashboard").get_json()["total"], q("SELECT COUNT(*) FROM complaints WHERE state='TN'")[0][0])
+        self.assertEqual(self.upstate.get("/api/dashboard").get_json()["total"], 3)
+        self.assertEqual(self.tneb.get("/api/dashboard").get_json()["role"], "staff")
+        # the officer in UP never sees TN cases
+        self.assertEqual(self.upstaff.get("/api/dashboard").get_json()["total"], 2)
+
+    def test_22_super_admin_state_filter(self):
+        self.assertEqual(self.sup.get("/api/dashboard?state=UP").get_json()["total"], 3)
+        self.assertEqual(self.sup.get("/api/dashboard?state=TN").get_json()["total"], q("SELECT COUNT(*) FROM complaints WHERE state='TN'")[0][0])
+        self.assertEqual(self.sup.get("/api/dashboard?state=ZZ").get_json()["total"], q("SELECT COUNT(*) FROM complaints")[0][0])       # unknown -> all
+        self.assertEqual(self.adm.get("/api/dashboard?state=UP").get_json()["total"], q("SELECT COUNT(*) FROM complaints WHERE district='Chennai'")[0][0])       # filter ignored for others
+        self.assertEqual(self.sup.get("/dashboard?state=UP").status_code, 200)
+        self.assertEqual(self.sup.get("/admin/departments?state=UP").status_code, 200)
+
+    def test_23_state_specific_agency_names(self):
+        up_page = self.upadm.get(self.upadm.get("/api/dashboard").get_json()["queue"][0]["url"]).get_data(as_text=True)
+        self.assertIn("UPPCL", up_page)
+        self.assertNotIn("TNEB", up_page)
+        tn_page = self.adm.get(self.adm.get("/api/dashboard").get_json()["queue"][0]["url"]).get_data(as_text=True)
+        self.assertIn("TNEB", tn_page)
+
+    def test_24_report_must_match_state_and_notifies_local_admin(self):
+        t = meta_csrf(self.upcit, "/complaints/new")
+        base = {"_csrf": t, "category": "Electricity", "title": "Broken pole", "description": "Leaning pole", "area": "Hazratganj"}
+        r = self.upcit.post("/complaints/new", data={**base, "state": "UP", "district": "Chennai"})        # wrong pair
+        self.assertEqual(r.status_code, 200)
+        r = self.upcit.post("/complaints/new", data={**base, "state": "UP", "district": "Lucknow"})
+        self.assertEqual(r.status_code, 302)
+        cid = int(r.headers["Location"].rsplit("/", 1)[1])
+        self.assertEqual(q("SELECT state FROM complaints WHERE id=?", (cid,))[0][0], "UP")
+        notes = self.upadm.get("/api/notifications").get_json()["items"]
+        self.assertTrue(any("UPPCL" in n["message"] and "Hazratganj" in n["message"] for n in notes))
+        self.assertFalse(any("Hazratganj" in n["message"] for n in self.adm.get("/api/notifications").get_json()["items"]))
+        # forward within UP -> UP officer notified, not the TN one
+        ta = meta_csrf(self.upadm, f"/complaints/{cid}")
+        self.upadm.post(f"/complaints/{cid}/approve", data={"_csrf": ta, "forward_to": "Electricity"})
+        self.assertTrue(any("Hazratganj" in n["message"] or "Broken pole" in n["message"] for n in self.upstaff.get("/api/notifications").get_json()["items"]))
+        self.assertFalse(any("Broken pole" in n["message"] for n in self.tneb.get("/api/notifications").get_json()["items"]))
+
+    def test_25_same_district_name_in_two_states(self):
+        self.assertIn("Bilaspur", A.geo.district_names("HP"))
+        self.assertIn("Bilaspur", A.geo.district_names("CG"))
+        # an officer in Bilaspur (HP) must not see a Bilaspur (CG) case
+        with A.db() as con:
+            A.insert(con, "INSERT INTO users(name,email,password_hash,role,state,district,created_at,email_verified,must_change_password) VALUES('HP Admin','hp@x.in',?,'district_admin','HP','Bilaspur',?,1,0)", (A.generate_password_hash(PW), A.now_iso()))
+            cg = A.insert(con, "INSERT INTO users(name,email,password_hash,role,state,district,created_at,email_verified,must_change_password) VALUES('CG Citizen','cg@x.in',?,'citizen','CG','Bilaspur',?,1,0)", (A.generate_password_hash(PW), A.now_iso()))
+        t = meta_csrf(login("cg@x.in")[0], "/complaints/new") if False else None
+        cl = login("cg@x.in")[0]
+        t = meta_csrf(cl, "/complaints/new")
+        r = cl.post("/complaints/new", data={"_csrf": t, "category": "Roads & Highways", "title": "Pothole", "description": "d", "state": "CG", "district": "Bilaspur", "area": "Sarkanda"})
+        url = r.headers["Location"]
+        hp = login("hp@x.in")[0]
+        self.assertEqual(hp.get(url).status_code, 403)
+        self.assertEqual(hp.get("/api/dashboard").get_json()["total"], 0)
+
+    def test_26_state_admin_user_creation_rules(self):
+        t = meta_csrf(self.tnstate, "/admin/users")
+        # creates a district admin in own state
+        self.tnstate.post("/admin/users", data={"_csrf": t, "name": "Madurai Admin", "email": "mdu@x.in", "password": "Madurai-Pass-1", "role": "district_admin", "district": "Madurai"})
+        self.assertEqual(q("SELECT role,state,district FROM users WHERE email='mdu@x.in'"), [("district_admin", "TN", "Madurai")])
+        # cannot create a super admin, nor cross into another state or an invalid district
+        self.tnstate.post("/admin/users", data={"_csrf": t, "name": "Evil", "email": "evil@x.in", "password": "Evil-Pass-123", "role": "superadmin"})
+        self.tnstate.post("/admin/users", data={"_csrf": t, "name": "Cross", "email": "cross@x.in", "password": "Cross-Pass-123", "role": "district_admin", "state": "UP", "district": "Lucknow"})
+        self.tnstate.post("/admin/users", data={"_csrf": t, "name": "Bad", "email": "bad@x.in", "password": "Bad-Pass-12345", "role": "district_admin", "district": "Lucknow"})
+        self.assertEqual(q("SELECT email FROM users WHERE email IN ('evil@x.in','cross@x.in','bad@x.in')"), [])
+        # super admin creates a state admin for Kerala
+        ts = meta_csrf(self.sup, "/admin/users")
+        self.sup.post("/admin/users", data={"_csrf": ts, "name": "Kerala Admin", "email": "kl@x.in", "password": "Kerala-Pass-1", "role": "state_admin", "state": "KL"})
+        self.assertEqual(q("SELECT role,state,district FROM users WHERE email='kl@x.in'"), [("state_admin", "KL", None)])
+        # citizens and officers cannot reach admin pages
+        for cl in (self.upcit, self.upstaff):
+            self.assertEqual(cl.get("/admin/users").status_code, 403)
+            self.assertEqual(cl.get("/admin/regions").status_code, 403)
+        self.assertEqual(self.upadm.get("/admin/regions").status_code, 403)               # district admins don't manage regions
+
+    def test_27_regions_admin(self):
+        t = meta_csrf(self.upstate, "/admin/regions")
+        self.assertEqual(self.upstate.get("/admin/regions").status_code, 200)
+        self.upstate.post("/admin/regions", data={"_csrf": t, "state": "TN", "action": "add_district", "name": "Hacked"})   # state param ignored for state admins
+        self.assertNotIn("Hacked", A.geo.district_names("TN"))
+        self.upstate.post("/admin/regions", data={"_csrf": t, "action": "add_district", "name": "Test Nagar", "lat": "26.9", "lng": "80.9"})
+        self.assertIn("Test Nagar", A.geo.district_names("UP"))
+        self.assertEqual(A.geo.center("UP", "Test Nagar")[2], 12)
+        self.upstate.post("/admin/regions", data={"_csrf": t, "action": "delete_district", "name": "Lucknow"})          # in use -> refused
+        self.assertIn("Lucknow", A.geo.district_names("UP"))
+        self.upstate.post("/admin/regions", data={"_csrf": t, "action": "delete_district", "name": "Test Nagar"})
+        self.assertNotIn("Test Nagar", A.geo.district_names("UP"))
+        form = {"_csrf": t, "action": "save_agencies"}
+        form.update({f"name_{c}": "" for c in A.DEPARTMENTS}); form.update({f"short_{c}": "" for c in A.DEPARTMENTS})
+        form.update({"name_Electricity": "Madhyanchal Vidyut Vitran Nigam", "short_Electricity": "MVVNL"})
+        self.upstate.post("/admin/regions", data=form)
+        self.assertEqual(A.geo.agency("UP", "Electricity")["short"], "MVVNL")
+        self.assertEqual(A.geo.agency("TN", "Electricity")["short"], "TNEB")             # other states untouched
+        self.assertEqual(self.sup.get("/admin/regions?state=KL").status_code, 200)
+
+    def test_28_register_requires_valid_state_district(self):
+        with A.db() as con:
+            con.execute("DELETE FROM rate_events")          # earlier tests used up this network's sign-up allowance
+        c = A.app.test_client()
+        t = csrf_from(c.get("/register").get_data(as_text=True))
+        form = {"_csrf": t, "name": "Sita Devi", "email": "sita@example.com", "state": "UP", "district": "Chennai", "password": "Good-Pass-2026", "agree": "on"}
+        self.assertIn("state and district", c.post("/register", data=form).get_data(as_text=True))
+        form["district"] = "Varanasi"
+        self.assertEqual(c.post("/register", data=form).status_code, 302)
+        self.assertEqual(q("SELECT state,district FROM users WHERE email='sita@example.com'"), [("UP", "Varanasi")])
+        page = A.app.test_client().get("/register").get_data(as_text=True)
+        self.assertIn("window.__GEO__", page)
+        self.assertEqual(page.count("window.__GEO__"), 1)
+
+    def test_29_legacy_database_upgrade(self):
+        import sqlite3
+        path = os.path.join(TMP, "legacy.db")
+        con = sqlite3.connect(path)
+        con.executescript("""CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password_hash TEXT, role TEXT, district TEXT, department TEXT, created_at TEXT);
+        CREATE TABLE complaints (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket TEXT UNIQUE, user_id INTEGER, title TEXT, description TEXT, category TEXT, district TEXT, area TEXT, address TEXT, latitude REAL, longitude REAL, photo TEXT, status TEXT, priority TEXT, assigned_to INTEGER, resolution_note TEXT, created_at TEXT, updated_at TEXT);
+        INSERT INTO users VALUES (1,'Old User','old@x.in','h','citizen','Madurai',NULL,'2025-01-01');
+        INSERT INTO complaints VALUES (1,'CF-OLD',1,'t','d','Electricity','Madurai','Anna Nagar',NULL,NULL,NULL,NULL,'Under Review','Medium',NULL,NULL,'2025-01-01T10:00:00','2025-01-01T10:00:00');""")
+        con.commit(); con.close()
+        import db as D
+        old = D.DB_PATH
+        D.DB_PATH = __import__("pathlib").Path(path)
+        try:
+            D.init_schema()
+            with D.db() as c2:
+                self.assertEqual(tuple(c2.execute("SELECT state, status FROM complaints WHERE id=1").fetchone()), ("TN", "Submitted"))
+                self.assertEqual(c2.execute("SELECT state FROM users WHERE id=1").fetchone()[0], "TN")
+        finally:
+            D.DB_PATH = old
 
 
 if __name__ == "__main__":

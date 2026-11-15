@@ -504,3 +504,7 @@ select{color-scheme:dark}textarea{resize:vertical}
 
 /* Dark map look for light tile sets (OpenStreetMap): invert + tint, no API key needed */
 .tiles-dark{filter:invert(1) hue-rotate(195deg) brightness(.92) contrast(.92) saturate(.55)}
+
+/* ---------- Multi-state additions ---------- */
+.state-filter{display:flex;gap:8px;align-items:center}
+.state-filter select{margin:0;min-width:190px;padding:9px 12px}

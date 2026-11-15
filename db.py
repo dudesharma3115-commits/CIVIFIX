@@ -127,7 +127,7 @@ SCHEMA = [
         id {PK}, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'citizen', district TEXT, department TEXT, created_at TEXT NOT NULL,
         email_verified INTEGER NOT NULL DEFAULT 1, must_change_password INTEGER NOT NULL DEFAULT 0,
-        deleted_at TEXT)""",
+        deleted_at TEXT, state TEXT)""",
     f"""CREATE TABLE IF NOT EXISTS complaints (
         id {PK}, ticket TEXT NOT NULL UNIQUE, user_id {INT} NOT NULL REFERENCES users(id),
         title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
@@ -137,7 +137,7 @@ SCHEMA = [
         assigned_to {INT} REFERENCES users(id), resolution_note TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
         forwarded_to TEXT, approved_by {INT}, approved_at TEXT, resolved_at TEXT,
-        resolution_photo TEXT, confirmed_at TEXT)""",
+        resolution_photo TEXT, confirmed_at TEXT, state TEXT)""",
     f"""CREATE TABLE IF NOT EXISTS updates (
         id {PK}, complaint_id {INT} NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
         actor_id {INT} REFERENCES users(id), status TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL)""",
@@ -153,7 +153,11 @@ SCHEMA = [
     f"""CREATE TABLE IF NOT EXISTS otp_codes (
         id {PK}, email TEXT NOT NULL, purpose TEXT NOT NULL, code_hash TEXT NOT NULL,
         expires {REAL} NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)""",
-    "CREATE INDEX IF NOT EXISTS idx_c_district ON complaints(district, status)",
+    f"""CREATE TABLE IF NOT EXISTS districts (
+        id {PK}, state TEXT NOT NULL, name TEXT NOT NULL, lat {REAL}, lng {REAL}, UNIQUE(state, name))""",
+    f"""CREATE TABLE IF NOT EXISTS agency_names (
+        id {PK}, state TEXT NOT NULL, category TEXT NOT NULL, name TEXT NOT NULL, short TEXT NOT NULL, UNIQUE(state, category))""",
+    "CREATE INDEX IF NOT EXISTS idx_c_district ON complaints(state, district, status)",
     "CREATE INDEX IF NOT EXISTS idx_c_user ON complaints(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_n_user ON notifications(user_id, is_read)",
     "CREATE INDEX IF NOT EXISTS idx_rate ON rate_events(k, ts)",
@@ -164,9 +168,9 @@ SCHEMA = [
 # Columns added after the first release (old databases are upgraded automatically).
 MIGRATIONS = {
     "complaints": [("forwarded_to", "TEXT"), ("approved_by", INT), ("approved_at", "TEXT"), ("resolved_at", "TEXT"),
-                   ("resolution_photo", "TEXT"), ("confirmed_at", "TEXT")],
+                   ("resolution_photo", "TEXT"), ("confirmed_at", "TEXT"), ("state", "TEXT")],
     "users": [("email_verified", "INTEGER NOT NULL DEFAULT 1"), ("must_change_password", "INTEGER NOT NULL DEFAULT 0"),
-              ("deleted_at", "TEXT")],
+              ("deleted_at", "TEXT"), ("state", "TEXT")],
 }
 
 
@@ -181,12 +185,17 @@ def init_schema():
     with db() as con:
         if IS_PG:
             con.execute("SELECT pg_advisory_xact_lock(7351)")   # several workers may start at once
-        for stmt in SCHEMA:
+        for stmt in (x for x in SCHEMA if not x.startswith("CREATE INDEX")):
             con.execute(stmt)
         for table, cols in MIGRATIONS.items():
             have = _columns(con, table)
             for name, decl in cols:
                 if name not in have:
                     con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+        # databases from the Tamil Nadu-only version: those rows belong to TN
+        con.execute("UPDATE users SET state='TN' WHERE state IS NULL AND district IS NOT NULL")
+        con.execute("UPDATE complaints SET state='TN' WHERE state IS NULL")
         con.execute("UPDATE complaints SET status='Submitted' WHERE status='Under Review'")
         con.execute("UPDATE complaints SET status='Forwarded', forwarded_to=COALESCE(forwarded_to, category) WHERE status='Assigned'")
+        for stmt in (x for x in SCHEMA if x.startswith("CREATE INDEX")):
+            con.execute(stmt)

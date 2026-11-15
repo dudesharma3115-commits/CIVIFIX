@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set use_geo = true %}
 {% block title %}Create account · CivicFix{% endblock %}
 {% block pubcontent %}
 <section class="auth">
@@ -8,7 +9,8 @@
     <h2>Create account</h2>
     <label>Full name<input name="name" required maxlength="100"></label>
     <label>Email<input name="email" type="email" required></label>
-    <label>District<select name="district" required><option value="">Select your district</option>{% for d in districts %}<option>{{ d }}</option>{% endfor %}</select></label>
+<label>State<select name="state" id="stateSel" required data-districts="#districtSel" data-preset="{{ request.form.get('state') or (me.state if me else '') or '' }}"><option value="">Choose state</option></select></label>
+    <label>District<select name="district" id="districtSel" required data-preset="{{ request.form.get('district') or (me.district if me else '') or '' }}"><option value="">Choose state first</option></select></label>
     <label>Password<input name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="8+ characters, with a letter and a number"></label>
     <label class="check"><input type="checkbox" name="agree" required><span>I agree to the <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Terms</a> and <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Privacy Policy</a>, including that my name, report details, photos and locations are shared with the officials who handle my case.</span></label>
     <button class="btn btn-primary btn-full btn-lg" type="submit">Create my account {{ icon('arrow', 17) }}</button>

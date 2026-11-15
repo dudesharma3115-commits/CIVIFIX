@@ -1,7 +1,7 @@
 /* CivicFix — full-screen live map with status + department filters */
 document.addEventListener('DOMContentLoaded', async () => {
   const el = document.getElementById('bigMap');
-  const api = CivicMap.create(el, { center: [10.9, 78.4], zoom: 7 });
+  const api = CivicMap.create(el, { center: [22.9, 79.5], zoom: 5 });
   if (!api) return;
   const offS = new Set(), offC = new Set();
   const apply = () => api.setFilter(m => !offS.has(m.status) && !offC.has(m.category));

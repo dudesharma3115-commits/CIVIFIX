@@ -25,7 +25,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import mailer
 import storage
-from constants import (AGENCIES, DEPARTMENTS, DISTRICT_CENTERS, DISTRICTS, ICONS, PRIORITIES, ROLE_LABELS, STATUSES)
+import geo
+from constants import (ADMIN_ROLES, AGENCIES, DEPARTMENTS, ICONS, INDIA_CENTER, PRIORITIES, ROLE_LABELS, STATE_NAMES, STATES, STATUSES)
 from db import BASE, IS_PG, IntegrityError, close_request_db, db, init_schema, insert, now_iso
 from security import (audit, check_otp, client_ip, issue_otp, password_problem, rate_blocked, rate_hit)
 from services import add_update, ids_of, notify, ticket_id
@@ -117,17 +118,19 @@ def roles(*allowed):
     return decorator
 
 
-def scope(user, alias=""):
-    """SQL WHERE fragment limiting complaints to what this user may see."""
+def scope(user, alias="", state=None):
+    """SQL WHERE fragment limiting complaints to what this user may see (super admins may narrow by state)."""
     p = alias + "." if alias else ""
     role = user["role"]
     if role == "superadmin":
-        return "1=1", ()
+        return (f"{p}state=?", (state,)) if state else ("1=1", ())
+    if role == "state_admin":
+        return f"{p}state=?", (user["state"],)
     if role == "district_admin":
-        return f"{p}district=?", (user["district"],)
+        return f"{p}state=? AND {p}district=?", (user["state"], user["district"])
     if role == "staff":
-        return (f"{p}district=? AND ({p}forwarded_to=? OR {p}assigned_to=?)",
-                (user["district"], user["department"], user["id"]))
+        return (f"{p}state=? AND {p}district=? AND ({p}forwarded_to=? OR {p}assigned_to=?)",
+                (user["state"], user["district"], user["department"], user["id"]))
     return f"{p}user_id=?", (user["id"],)
 
 
@@ -135,10 +138,12 @@ def can_view(user, c):
     role = user["role"]
     if role == "superadmin":
         return True
+    if role == "state_admin":
+        return user["state"] == c["state"]
     if role == "district_admin":
-        return user["district"] == c["district"]
+        return user["state"] == c["state"] and user["district"] == c["district"]
     if role == "staff":
-        return user["district"] == c["district"] and (
+        return user["state"] == c["state"] and user["district"] == c["district"] and (
             c["forwarded_to"] == user["department"] or c["assigned_to"] == user["id"])
     return c["user_id"] == user["id"]
 
@@ -202,11 +207,14 @@ def safe_next(target):
 
 
 def pending_count(user):
-    if not user or user["role"] not in ("district_admin", "superadmin"):
+    if not user or user["role"] not in ADMIN_ROLES:
         return 0
     where, params = scope(user)
     with db() as con:
         return con.execute(f"SELECT COUNT(*) FROM complaints WHERE {where} AND status='Submitted'", params).fetchone()[0]
+
+
+app.add_template_global(geo.agency, "agency")
 
 
 @app.context_processor
@@ -216,10 +224,12 @@ def inject_globals():
     if user:
         with db() as con:
             unread = con.execute("SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0", (user["id"],)).fetchone()[0]
-    return {"me": user, "districts": DISTRICTS, "departments": DEPARTMENTS, "statuses": STATUSES,
-            "agencies": AGENCIES, "role_labels": ROLE_LABELS, "icons": ICONS, "centers": DISTRICT_CENTERS,
-            "unread": unread, "pending_badge": pending_count(user), "demo_mode": DEMO_MODE,
-            "nonce": g.get("nonce", ""), "reopen_days": REOPEN_DAYS, "tiles": TILES,
+    return {"me": user, "departments": DEPARTMENTS, "statuses": STATUSES, "states": STATES,
+            "agencies": geo.agencies_for(user["state"] if user and user["role"] != "superadmin" else None),
+            "role_labels": ROLE_LABELS, "icons": ICONS, "unread": unread, "pending_badge": pending_count(user),
+            "demo_mode": DEMO_MODE, "nonce": g.get("nonce", ""), "reopen_days": REOPEN_DAYS, "tiles": TILES,
+            "state_name": STATE_NAMES.get(user["state"]) if user and user["state"] else None, "admin_roles": ADMIN_ROLES,
+            "geo": geo.get_geo(), "generic_agencies": AGENCIES,
             "contact_email": os.environ.get("CIVICFIX_CONTACT_EMAIL", "contact@your-domain.in")}
 
 
@@ -238,24 +248,24 @@ def hours_between(a, b):
     return (parse_ts(b) - parse_ts(a)).total_seconds() / 3600
 
 
-def jitter(cid):
+def jitter(cid, spread):
     r = random.Random(cid * 7919)
-    return (r.uniform(-0.035, 0.035), r.uniform(-0.035, 0.035))
+    return (r.uniform(-spread, spread), r.uniform(-spread, spread))
 
 
-def markers_for(con, user):
-    where, params = scope(user)
+def markers_for(con, user, state=None):
+    where, params = scope(user, state=state)
     if user["role"] == "citizen":
-        rows = con.execute("SELECT * FROM complaints WHERE user_id=? OR (district=? AND status NOT IN ('Submitted','Rejected')) "
-                           "ORDER BY created_at DESC LIMIT 400", (user["id"], user["district"])).fetchall()
+        rows = con.execute("SELECT * FROM complaints WHERE user_id=? OR (state=? AND district=? AND status NOT IN ('Submitted','Rejected')) "
+                           "ORDER BY created_at DESC LIMIT 400", (user["id"], user["state"], user["district"])).fetchall()
     else:
         rows = con.execute(f"SELECT * FROM complaints WHERE {where} ORDER BY created_at DESC LIMIT 400", params).fetchall()
     out = []
     for r in rows:
         approx = r["latitude"] is None or r["longitude"] is None
         if approx:
-            clat, clng = DISTRICT_CENTERS.get(r["district"], (11.1271, 78.6569))
-            dlat, dlng = jitter(r["id"])
+            clat, clng, z = geo.center(r["state"], r["district"])
+            dlat, dlng = jitter(r["id"], 0.035 if z >= 12 else 0.4)
             lat, lng = clat + dlat, clng + dlng
         else:
             lat, lng = r["latitude"], r["longitude"]
@@ -266,8 +276,9 @@ def markers_for(con, user):
     return out
 
 
-def dept_stats(con, user):
-    where, params = scope(user)
+def dept_stats(con, user, state=None):
+    where, params = scope(user, state=state)
+    names = geo.agencies_for(user["state"] if user["role"] != "superadmin" else state)
     rows = con.execute(f"SELECT forwarded_to, status, priority, created_at, resolved_at FROM complaints "
                        f"WHERE {where} AND forwarded_to IS NOT NULL", params).fetchall()
     agg = {d: {"total": 0, "resolved": 0, "open": 0, "critical": 0, "hours": []} for d in DEPARTMENTS}
@@ -284,22 +295,28 @@ def dept_stats(con, user):
             a["open"] += 1
             a["critical"] += r["priority"] == "Critical"
     if user["role"] == "district_admin":
-        orows = con.execute("SELECT department, COUNT(*) AS n FROM users WHERE role='staff' AND district=? AND deleted_at IS NULL GROUP BY department", (user["district"],)).fetchall()
+        orows = con.execute("SELECT department, COUNT(*) AS n FROM users WHERE role='staff' AND state=? AND district=? AND deleted_at IS NULL GROUP BY department", (user["state"], user["district"])).fetchall()
+    elif user["role"] == "state_admin" or state:
+        orows = con.execute("SELECT department, COUNT(*) AS n FROM users WHERE role='staff' AND state=? AND deleted_at IS NULL GROUP BY department", (user["state"] if user["role"] == "state_admin" else state,)).fetchall()
     else:
         orows = con.execute("SELECT department, COUNT(*) AS n FROM users WHERE role='staff' AND deleted_at IS NULL GROUP BY department").fetchall()
     officers = {r["department"]: r["n"] for r in orows}
     out = []
     for d in DEPARTMENTS:
         a = agg[d]
-        out.append({"dept": d, "short": AGENCIES[d]["short"], "name": AGENCIES[d]["name"], "icon": AGENCIES[d]["icon"],
-                    "color": AGENCIES[d]["color"], "total": a["total"], "resolved": a["resolved"], "open": a["open"],
+        out.append({"dept": d, "short": names[d]["short"], "name": names[d]["name"], "icon": names[d]["icon"],
+                    "color": names[d]["color"], "total": a["total"], "resolved": a["resolved"], "open": a["open"],
                     "critical": a["critical"], "officers": officers.get(d, 0),
                     "avg_hours": round(sum(a["hours"]) / len(a["hours"]), 1) if a["hours"] else None})
     return out
 
 
-def build_dashboard(user):
-    where, params = scope(user)
+def build_dashboard(user, state=None):
+    if user["role"] != "superadmin":
+        state = None
+    elif state not in STATE_NAMES:
+        state = None
+    where, params = scope(user, state=state)
     open_in = "('Submitted','Approved','Forwarded','In Progress')"
     with db() as con:
         by_status = {s: 0 for s in STATUSES}
@@ -328,7 +345,7 @@ def build_dashboard(user):
             f"AND priority IN ('Critical','High') AND status IN {open_in} ORDER BY CASE priority WHEN 'Critical' THEN 0 ELSE 1 END, created_at DESC LIMIT 4", params)]
         for a in alerts:
             a["url"] = url_for("complaint_detail", complaint_id=a["id"])
-        awhere, aparams = scope(user, "c")
+        awhere, aparams = scope(user, "c", state)
         activity = [dict(r) for r in con.execute(
             f"SELECT u.status, u.note, u.created_at, c.id AS cid, c.ticket, c.title, us.name AS actor FROM updates u "
             f"JOIN complaints c ON c.id=u.complaint_id LEFT JOIN users us ON us.id=u.actor_id WHERE {awhere} "
@@ -336,7 +353,7 @@ def build_dashboard(user):
         for a in activity:
             a["url"] = url_for("complaint_detail", complaint_id=a["cid"])
         role = user["role"]
-        if role in ("district_admin", "superadmin"):
+        if role in ADMIN_ROLES:
             qsql, qtitle = "status='Submitted'", "Awaiting your approval"
         elif role == "staff":
             qsql, qtitle = "status IN ('Forwarded','In Progress')", "Forwarded to your department"
@@ -347,12 +364,20 @@ def build_dashboard(user):
             f"SELECT id, ticket, title, area, district, priority, category, status, created_at FROM complaints WHERE {where} AND {qsql} ORDER BY {order} LIMIT 6", params)]
         for q in queue:
             q["url"] = url_for("complaint_detail", complaint_id=q["id"])
-        departments = dept_stats(con, user) if role in ("district_admin", "superadmin") else []
+        departments = dept_stats(con, user, state) if role in ADMIN_ROLES else []
         districts = []
-        if role == "superadmin":
-            districts = [dict(r) for r in con.execute("SELECT district, COUNT(*) AS total, SUM(CASE WHEN status='Resolved' THEN 1 ELSE 0 END) AS resolved FROM complaints GROUP BY district ORDER BY total DESC LIMIT 6")]
-        markers = markers_for(con, user)
-    return {"role": role, "district": user["district"], "total": total, "by_status": by_status,
+        if role in ("superadmin", "state_admin"):
+            districts = [dict(r) for r in con.execute(
+                f"SELECT district, state, COUNT(*) AS total, SUM(CASE WHEN status='Resolved' THEN 1 ELSE 0 END) AS resolved FROM complaints WHERE {where} "
+                f"GROUP BY state, district ORDER BY total DESC LIMIT 6", params)]
+            for dr in districts:
+                dr["label"] = dr["district"] + ("" if role == "state_admin" else f", {dr['state']}")
+        markers = markers_for(con, user, state)
+    if role == "superadmin":
+        c = geo.center(state) if state else INDIA_CENTER
+    else:
+        c = geo.center(user["state"], user["district"] if role in ("district_admin", "staff", "citizen") else None)
+    return {"role": role, "district": user["district"], "state": state or user["state"], "center": list(c), "total": total, "by_status": by_status,
             "pending": by_status["Submitted"], "active": by_status["Approved"] + by_status["Forwarded"] + by_status["In Progress"],
             "in_field": by_status["Forwarded"] + by_status["In Progress"], "resolved": resolved, "rejected": by_status["Rejected"],
             "critical": critical, "resolution_rate": round(resolved / total * 100) if total else 0,
@@ -380,7 +405,7 @@ def home():
     with db() as con:
         stats = {"reported": con.execute("SELECT COUNT(*) FROM complaints").fetchone()[0],
                  "resolved": con.execute("SELECT COUNT(*) FROM complaints WHERE status='Resolved'").fetchone()[0],
-                 "districts": len(DISTRICTS)}
+                 "districts": con.execute("SELECT COUNT(*) FROM districts").fetchone()[0]}
     return render_template("index.html", stats=stats)
 
 
@@ -395,7 +420,7 @@ def track():
         else:
             rate_hit(f"track:{client_ip()}")
             with db() as con:
-                info = con.execute("SELECT id, ticket, category, district, area, status, forwarded_to, created_at, updated_at FROM complaints WHERE ticket=?", (t,)).fetchone()
+                info = con.execute("SELECT id, ticket, category, state, district, area, status, forwarded_to, created_at, updated_at FROM complaints WHERE ticket=?", (t,)).fetchone()
                 if info:
                     hist = con.execute("SELECT status, created_at FROM updates WHERE complaint_id=? ORDER BY created_at, id", (info["id"],)).fetchall()
                     steps = {}
@@ -439,10 +464,10 @@ def register():
         rate_hit(f"reg:{client_ip()}")
         f = request.form
         name, email = f.get("name", "").strip(), f.get("email", "").strip().lower()
-        password, district = f.get("password", ""), f.get("district", "")
+        password, district, state = f.get("password", ""), f.get("district", ""), f.get("state", "")
         problem = (None if 2 <= len(name) <= 100 else "Enter your full name.") or \
                   (None if EMAIL_RE.match(email) else "Enter a valid email address.") or \
-                  (None if district in DISTRICTS else "Choose your district.") or \
+                  (None if geo.valid_pair(state, district) else "Choose your state and district.") or \
                   password_problem(password, email, name) or \
                   (None if f.get("agree") else "Please accept the Terms and Privacy Policy to continue.")
         if problem:
@@ -457,8 +482,8 @@ def register():
                 flash("That email is already registered. Please sign in.", "error")
                 return render_template("register.html")
             try:
-                uid = insert(con, "INSERT INTO users(name,email,password_hash,role,district,created_at,email_verified) VALUES(?,?,?,'citizen',?,?,?)",
-                             (name, email, generate_password_hash(password), district, now_iso(), 0 if REQUIRE_VERIFY else 1))
+                uid = insert(con, "INSERT INTO users(name,email,password_hash,role,state,district,created_at,email_verified) VALUES(?,?,?,'citizen',?,?,?,?)",
+                             (name, email, generate_password_hash(password), state, district, now_iso(), 0 if REQUIRE_VERIFY else 1))
             except IntegrityError:
                 con.rollback()
                 flash("That email is already registered. Please sign in.", "error")
@@ -642,13 +667,14 @@ def account_delete():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html", data=build_dashboard(current_user()))
+    sf = request.args.get("state", "")
+    return render_template("dashboard.html", data=build_dashboard(current_user(), sf), state_filter=sf if sf in STATE_NAMES else "")
 
 
 @app.route("/api/dashboard")
 @login_required
 def api_dashboard():
-    return jsonify(build_dashboard(current_user()))
+    return jsonify(build_dashboard(current_user(), request.args.get("state", "")))
 
 
 @app.route("/map")
@@ -739,9 +765,9 @@ def new_complaint():
         if rate_blocked(f"report:{user['id']}", 10, 86400):
             return fail_page(429, "You've reached today's limit of 10 reports. Please try again tomorrow.")
         title, description = f.get("title", "").strip()[:140], f.get("description", "").strip()[:2000]
-        category, district = f.get("category", ""), f.get("district", "")
+        category, district, state = f.get("category", ""), f.get("district", ""), f.get("state", "")
         area, address = f.get("area", "").strip()[:100], f.get("address", "").strip()[:200]
-        if not title or not description or category not in DEPARTMENTS or district not in DISTRICTS or not area:
+        if not title or not description or category not in DEPARTMENTS or not geo.valid_pair(state, district) or not area:
             flash("Please complete all required fields (including the category).", "error")
             return render_template("complaint_new.html")
         try:
@@ -758,12 +784,12 @@ def new_complaint():
             lat = lng = None
         now = now_iso()
         with db() as con:
-            cid = insert(con, """INSERT INTO complaints(ticket,user_id,title,description,category,district,area,address,latitude,longitude,photo,created_at,updated_at)
-                                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                         (ticket_id(), user["id"], title, description, category, district, area, address, lat, lng, photo_name, now, now))
+            cid = insert(con, """INSERT INTO complaints(ticket,user_id,title,description,category,state,district,area,address,latitude,longitude,photo,created_at,updated_at)
+                                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                         (ticket_id(), user["id"], title, description, category, state, district, area, address, lat, lng, photo_name, now, now))
             add_update(con, cid, user["id"], "Submitted", "Report submitted by citizen. Waiting for district approval.", now)
-            notify(con, ids_of(con, "SELECT id FROM users WHERE role='district_admin' AND district=? AND deleted_at IS NULL", (district,)),
-                   cid, f"New {AGENCIES[category]['short']} report in {area}: {title[:60]}", "action")
+            notify(con, district_admin_ids(con, state, district),
+                   cid, f"New {geo.agency(state, category)['short']} report in {area}: {title[:60]}", "action")
         rate_hit(f"report:{user['id']}")
         flash("Report submitted. Your district admin has been notified.", "success")
         return redirect(url_for("complaint_detail", complaint_id=cid))
@@ -801,13 +827,24 @@ def complaint_detail(complaint_id):
         history = con.execute("SELECT updates.*, users.name AS actor_name FROM updates LEFT JOIN users ON users.id=updates.actor_id "
                               "WHERE complaint_id=? ORDER BY updates.created_at DESC, updates.id DESC", (complaint_id,)).fetchall()
         staff = []
-        if user["role"] in ("district_admin", "superadmin"):
-            staff = con.execute("SELECT id,name,department FROM users WHERE role='staff' AND district=? AND deleted_at IS NULL ORDER BY name", (item["district"],)).fetchall()
+        if user["role"] in ADMIN_ROLES:
+            staff = con.execute("SELECT id,name,department FROM users WHERE role='staff' AND state=? AND district=? AND deleted_at IS NULL ORDER BY name", (item["state"], item["district"])).fetchall()
     can_reopen = (user["id"] == item["user_id"] and item["status"] == "Resolved" and item["resolved_at"]
                   and (datetime.now() - parse_ts(item["resolved_at"])).days < REOPEN_DAYS)
     return render_template("complaint_detail.html", item=item, history=history, owner=owner, assigned=assigned, approver=approver,
-                           staff=staff, steps=step_times(history), is_admin=user["role"] in ("district_admin", "superadmin"),
+                           staff=staff, steps=step_times(history), is_admin=user["role"] in ADMIN_ROLES,
                            can_reopen=bool(can_reopen), is_owner=user["id"] == item["user_id"])
+
+
+def district_admin_ids(con, state, district):
+    """Who should hear about a new case: its district admins; if none exist, the state admins; then super admins."""
+    ids = ids_of(con, "SELECT id FROM users WHERE role='district_admin' AND state=? AND district=? AND deleted_at IS NULL", (state, district))
+    ids = ids or ids_of(con, "SELECT id FROM users WHERE role='state_admin' AND state=? AND deleted_at IS NULL", (state,))
+    return ids or ids_of(con, "SELECT id FROM users WHERE role='superadmin' AND deleted_at IS NULL")
+
+
+def dept_staff_ids(con, state, district, dept):
+    return ids_of(con, "SELECT id FROM users WHERE role='staff' AND state=? AND district=? AND department=? AND deleted_at IS NULL", (state, district, dept))
 
 
 def load_case(con, cid):
@@ -827,14 +864,14 @@ def back(cid):
 def do_forward(con, user, item, dept, officer_id, note):
     officer = None
     if officer_id:
-        officer = con.execute("SELECT id FROM users WHERE id=? AND role='staff' AND district=? AND department=? AND deleted_at IS NULL",
-                              (officer_id, item["district"], dept)).fetchone()
+        officer = con.execute("SELECT id FROM users WHERE id=? AND role='staff' AND state=? AND district=? AND department=? AND deleted_at IS NULL",
+                              (officer_id, item["state"], item["district"], dept)).fetchone()
     now = now_iso()
     con.execute("UPDATE complaints SET status='Forwarded', forwarded_to=?, assigned_to=?, updated_at=? WHERE id=?",
                 (dept, officer["id"] if officer else None, now, item["id"]))
-    ag = AGENCIES[dept]
+    ag = geo.agency(item["state"], dept)
     add_update(con, item["id"], user["id"], "Forwarded", f"Forwarded to {ag['name']}." + (f" {note}" if note else ""), now)
-    targets = [officer["id"]] if officer else ids_of(con, "SELECT id FROM users WHERE role='staff' AND district=? AND department=? AND deleted_at IS NULL", (item["district"], dept))
+    targets = [officer["id"]] if officer else dept_staff_ids(con, item["state"], item["district"], dept)
     notify(con, targets, item["id"], f"{ag['short']}: new case {item['ticket']}: {item['title'][:60]}", "action", now)
     notify(con, [item["user_id"]], item["id"], f"Your report {item['ticket']} was sent to {ag['name']}.", "success", now)
     audit("case_forwarded", item["ticket"], dept)
@@ -842,7 +879,7 @@ def do_forward(con, user, item, dept, officer_id, note):
 
 
 @app.route("/complaints/<int:cid>/approve", methods=["POST"])
-@roles("district_admin", "superadmin")
+@roles(*ADMIN_ROLES)
 def approve_complaint(cid):
     with db() as con:
         user, item = load_case(con, cid)
@@ -859,14 +896,14 @@ def approve_complaint(cid):
         audit("case_approved", item["ticket"], priority)
         if forward_to in DEPARTMENTS:
             n = do_forward(con, user, item, forward_to, request.form.get("assigned_to"), "")
-            flash(f"Approved and forwarded to {AGENCIES[forward_to]['name']}." + ("" if n else " No officer is registered for that department in this district yet; it is queued for them."), "success" if n else "warn")
+            flash(f"Approved and forwarded to {geo.agency(item['state'], forward_to)['name']}." + ("" if n else " No officer is registered for that department in this district yet; it is queued for them."), "success" if n else "warn")
         else:
             flash("Report approved. Forward it to a department next.", "success")
     return back(cid)
 
 
 @app.route("/complaints/<int:cid>/reject", methods=["POST"])
-@roles("district_admin", "superadmin")
+@roles(*ADMIN_ROLES)
 def reject_complaint(cid):
     reason = request.form.get("note", "").strip()[:500]
     with db() as con:
@@ -887,7 +924,7 @@ def reject_complaint(cid):
 
 
 @app.route("/complaints/<int:cid>/forward", methods=["POST"])
-@roles("district_admin", "superadmin")
+@roles(*ADMIN_ROLES)
 def forward_complaint(cid):
     dept = request.form.get("forward_to", "")
     with db() as con:
@@ -899,12 +936,12 @@ def forward_complaint(cid):
             flash("Choose a department.", "error")
             return back(cid)
         n = do_forward(con, user, item, dept, request.form.get("assigned_to"), request.form.get("note", "").strip()[:500])
-    flash(f"Forwarded to {AGENCIES[dept]['name']}." + ("" if n else " No officer is registered there yet; it is queued."), "success" if n else "warn")
+    flash(f"Forwarded to {geo.agency(item['state'], dept)['name']}." + ("" if n else " No officer is registered there yet; it is queued."), "success" if n else "warn")
     return back(cid)
 
 
 @app.route("/complaints/<int:cid>/progress", methods=["POST"])
-@roles("staff", "district_admin", "superadmin")
+@roles("staff", *ADMIN_ROLES)
 def progress_complaint(cid):
     note = request.form.get("note", "").strip()[:500] or "Team is on site and working on it."
     with db() as con:
@@ -923,7 +960,7 @@ def progress_complaint(cid):
 
 
 @app.route("/complaints/<int:cid>/resolve", methods=["POST"])
-@roles("staff", "district_admin", "superadmin")
+@roles("staff", *ADMIN_ROLES)
 def resolve_complaint(cid):
     note = request.form.get("note", "").strip()[:1000]
     with db() as con:
@@ -949,8 +986,8 @@ def resolve_complaint(cid):
                     (note, proof, now, now, user["id"] if user["role"] == "staff" else None, cid))
         add_update(con, cid, user["id"], "Resolved", note, now)
         notify(con, [item["user_id"]], cid, f"Fixed! {item['ticket']} was resolved. Please confirm it looks good.", "success", now)
-        short = AGENCIES.get(item["forwarded_to"] or "Other", AGENCIES["Other"])["short"]
-        notify(con, ids_of(con, "SELECT id FROM users WHERE role='district_admin' AND district=? AND deleted_at IS NULL", (item["district"],)), cid, f"{item['ticket']} resolved by {short}.", "success", now)
+        short = geo.agency(item["state"], item["forwarded_to"] or "Other")["short"]
+        notify(con, district_admin_ids(con, item["state"], item["district"]), cid, f"{item['ticket']} resolved by {short}.", "success", now)
         audit("case_resolved", item["ticket"])
     flash("Case resolved. Nice work.", "success")
     return back(cid)
@@ -987,8 +1024,8 @@ def reopen_complaint(cid):
         now = now_iso()
         con.execute("UPDATE complaints SET status='Forwarded', resolved_at=NULL, confirmed_at=NULL, updated_at=? WHERE id=?", (now, cid))
         add_update(con, cid, user["id"], "Forwarded", f"Reopened by citizen: {reason}", now)
-        targets = ids_of(con, "SELECT id FROM users WHERE role='staff' AND district=? AND department=? AND deleted_at IS NULL", (item["district"], item["forwarded_to"] or item["category"]))
-        targets += [item["assigned_to"]] + ids_of(con, "SELECT id FROM users WHERE role='district_admin' AND district=? AND deleted_at IS NULL", (item["district"],))
+        targets = dept_staff_ids(con, item["state"], item["district"], item["forwarded_to"] or item["category"])
+        targets += [item["assigned_to"]] + district_admin_ids(con, item["state"], item["district"])
         notify(con, targets, cid, f"{item['ticket']} was reopened by the citizen: {reason[:70]}", "warn", now)
         audit("case_reopened", item["ticket"], reason)
     flash("Case reopened and sent back to the department.", "success")
@@ -999,33 +1036,47 @@ def reopen_complaint(cid):
 # Admin: departments, users, audit log
 # --------------------------------------------------------------------------- #
 @app.route("/admin/departments")
-@roles("district_admin", "superadmin")
+@roles(*ADMIN_ROLES)
 def admin_departments():
     with db() as con:
-        stats = dept_stats(con, current_user())
+        stats = dept_stats(con, current_user(), request.args.get("state", "") or None)
     return render_template("departments.html", stats=stats)
 
 
+CREATABLE = {"superadmin": ("state_admin", "district_admin", "staff", "superadmin"),
+             "state_admin": ("district_admin", "staff"), "district_admin": ("staff",)}
+
+
 @app.route("/admin/users", methods=["GET", "POST"])
-@roles("district_admin", "superadmin")
+@roles(*ADMIN_ROLES)
 def admin_users():
     user = current_user()
+    allowed = CREATABLE[user["role"]]
     if request.method == "POST":
         f = request.form
         name, email, password = f.get("name", "").strip()[:100], f.get("email", "").strip().lower(), f.get("password", "")
-        role, district, department = f.get("role", "staff"), f.get("district", "") or None, f.get("department", "") or None
+        role = f.get("role", "staff")
+        state, district, department = f.get("state", "") or None, f.get("district", "") or None, f.get("department", "") or None
+        if user["role"] in ("state_admin", "district_admin"):
+            state = user["state"]
         if user["role"] == "district_admin":
-            role, district = "staff", user["district"]
+            district = user["district"]
+        if role == "superadmin":
+            state = district = None
+        elif role == "state_admin":
+            district = None
         problems = []
         if not name or not EMAIL_RE.match(email):
             problems.append("Enter a name and a valid email.")
         pp = password_problem(password, email, name)
         if pp:
             problems.append(pp)
-        if role not in ("staff", "district_admin", "superadmin"):
-            problems.append("Invalid role.")
-        if role in ("staff", "district_admin") and district not in DISTRICTS:
-            problems.append("Choose a district.")
+        if role not in allowed:
+            problems.append("You can't create that role.")
+        if role in ("state_admin", "district_admin", "staff") and state not in STATE_NAMES:
+            problems.append("Choose a state.")
+        if role in ("district_admin", "staff") and not geo.valid_pair(state, district):
+            problems.append("Choose a district in that state.")
         if role == "staff" and department not in DEPARTMENTS:
             problems.append("Choose a department for the officer.")
         if problems:
@@ -1033,26 +1084,75 @@ def admin_users():
         else:
             try:
                 with db() as con:
-                    insert(con, "INSERT INTO users(name,email,password_hash,role,district,department,created_at,email_verified,must_change_password) VALUES(?,?,?,?,?,?,?,1,1)",
-                           (name, email, generate_password_hash(password), role, district if role != "superadmin" else None,
-                            department if role == "staff" else None, now_iso()))
-                audit("user_created", email, f"{role} {district or ''} {department or ''}")
+                    insert(con, "INSERT INTO users(name,email,password_hash,role,state,district,department,created_at,email_verified,must_change_password) VALUES(?,?,?,?,?,?,?,?,1,1)",
+                           (name, email, generate_password_hash(password), role, state, district, department if role == "staff" else None, now_iso()))
+                audit("user_created", email, f"{role} {state or ''} {district or ''} {department or ''}")
                 flash(f"{ROLE_LABELS[role]} account created for {name}. They must set a new password at first sign-in.", "success")
             except IntegrityError:
                 db_rollback()
                 flash("That email is already registered.", "error")
         return redirect(url_for("admin_users"))
     with db() as con:
+        order = "ORDER BY CASE role WHEN 'superadmin' THEN 0 WHEN 'state_admin' THEN 1 WHEN 'district_admin' THEN 2 WHEN 'staff' THEN 3 ELSE 4 END, state, district, name"
         if user["role"] == "superadmin":
-            rows = con.execute("SELECT * FROM users WHERE deleted_at IS NULL ORDER BY CASE role WHEN 'superadmin' THEN 0 WHEN 'district_admin' THEN 1 WHEN 'staff' THEN 2 ELSE 3 END, name").fetchall()
+            rows = con.execute(f"SELECT * FROM users WHERE deleted_at IS NULL {order}").fetchall()
+        elif user["role"] == "state_admin":
+            rows = con.execute(f"SELECT * FROM users WHERE state=? AND role IN ('district_admin','staff','state_admin') AND deleted_at IS NULL {order}", (user["state"],)).fetchall()
         else:
-            rows = con.execute("SELECT * FROM users WHERE district=? AND role IN ('staff','district_admin') AND deleted_at IS NULL ORDER BY role, name", (user["district"],)).fetchall()
-    return render_template("users.html", rows=rows)
+            rows = con.execute(f"SELECT * FROM users WHERE state=? AND district=? AND role IN ('staff','district_admin') AND deleted_at IS NULL {order}", (user["state"], user["district"])).fetchall()
+    return render_template("users.html", rows=rows, creatable=allowed, use_geo=True)
 
 
 def db_rollback():
     with db() as con:
         con.rollback()
+
+
+@app.route("/admin/regions", methods=["GET", "POST"])
+@roles("superadmin", "state_admin")
+def admin_regions():
+    """Fix the district list and the official agency names for a state."""
+    user = current_user()
+    state = (user["state"] if user["role"] == "state_admin" else request.values.get("state", "")) or ""
+    if request.method == "POST":
+        if state not in STATE_NAMES:
+            abort(400)
+        action = request.form.get("action")
+        with db() as con:
+            if action == "add_district":
+                name = request.form.get("name", "").strip()[:100]
+                lat, lng = clean_coord(request.form.get("lat"), 6, 38), clean_coord(request.form.get("lng"), 67, 98)
+                if not name:
+                    flash("Enter the district name.", "error")
+                elif con.execute("SELECT 1 FROM districts WHERE state=? AND name=?", (state, name)).fetchone():
+                    flash("That district already exists.", "error")
+                else:
+                    con.execute("INSERT INTO districts(state,name,lat,lng) VALUES(?,?,?,?)", (state, name, lat, lng))
+                    audit("district_added", name, state)
+                    flash(f"{name} added.", "success")
+            elif action == "delete_district":
+                name = request.form.get("name", "")
+                used = con.execute("SELECT 1 FROM complaints WHERE state=? AND district=? LIMIT 1", (state, name)).fetchone() or \
+                       con.execute("SELECT 1 FROM users WHERE state=? AND district=? LIMIT 1", (state, name)).fetchone()
+                if used:
+                    flash("That district already has users or reports, so it can't be removed.", "error")
+                else:
+                    con.execute("DELETE FROM districts WHERE state=? AND name=?", (state, name))
+                    audit("district_removed", name, state)
+                    flash(f"{name} removed.", "success")
+            elif action == "save_agencies":
+                for cat in DEPARTMENTS:
+                    nm, sh = request.form.get(f"name_{cat}", "").strip()[:80], request.form.get(f"short_{cat}", "").strip()[:30]
+                    con.execute("DELETE FROM agency_names WHERE state=? AND category=?", (state, cat))
+                    if nm and sh:
+                        con.execute("INSERT INTO agency_names(state,category,name,short) VALUES(?,?,?,?)", (state, cat, nm, sh))
+                audit("agency_names_saved", state)
+                flash("Agency names saved for this state.", "success")
+        geo.invalidate()
+        return redirect(url_for("admin_regions", state=state))
+    names = {c: geo.get_geo()["agencies"].get(state, {}).get(c) for c in DEPARTMENTS} if state in STATE_NAMES else {}
+    return render_template("regions.html", sel=state if state in STATE_NAMES else "", dlist=geo.get_geo()["districts"].get(state, []),
+                           names=names, generic=AGENCIES)
 
 
 @app.route("/admin/audit")
@@ -1108,6 +1208,9 @@ def e500(_):
 # --------------------------------------------------------------------------- #
 def bootstrap():
     init_schema()
+    with db() as con:
+        geo.seed_geo(con)
+    geo.invalidate()
     with db() as con:
         if con.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return

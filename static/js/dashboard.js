@@ -2,7 +2,6 @@
 (function () {
   const $ = s => document.querySelector(s);
   let data = window.__DASH__, sig = '', lastActKey = '', first = true, hidden = new Set(), mapApi = null;
-  const CENTERS = window.__CENTERS__ || {};
   const STAGES = [['Submitted', 'New'], ['Approved', 'Approved'], ['Forwarded', 'Sent'], ['In Progress', 'Fixing'], ['Resolved', 'Done']];
   const isStaffish = () => data.role === 'district_admin' || data.role === 'superadmin';
 
@@ -129,7 +128,7 @@
       `<a class="feed-item ${!first && i === 0 && lastActKey !== actKey(a) ? 'fresh' : ''}" href="${a.url}" style="--c:${CF.STATUS_COLOR[a.status] || '#35e0ff'}"><span class="tick"></span><div><p><b>${CF.esc(a.ticket)}</b> · ${CF.esc(a.status)} — ${CF.esc(a.note)}</p><small>${CF.esc(a.actor || 'CivicFix')} · ${CF.ago(a.created_at)}</small></div></a>`).join('')
       : '<div class="empty">No activity yet.</div>');
 
-    if (d.role === 'superadmin') set('#distRows', d.districts.map(x => `<div class="dist-row"><span>${CF.esc(x.district)}</span><b>${x.resolved}/${x.total}</b></div>`).join('') || '<div class="muted">No data</div>');
+    if (d.role === 'superadmin' || d.role === 'state_admin') set('#distRows', d.districts.map(x => `<div class="dist-row"><span>${CF.esc(x.label || x.district)}</span><b>${x.resolved}/${x.total}</b></div>`).join('') || '<div class="muted">No data</div>');
 
     document.querySelectorAll('.count').forEach(el => CF.countUp(el, +el.dataset.k ? +el.dataset.k : +el.textContent, '', first ? 1100 : 600));
     animateIn(document);
@@ -141,8 +140,8 @@
     const el = $('#ccMap');
     if (!el) return;
     if (!mapApi) {
-      const c = CENTERS[data.district] || [10.9, 78.4];
-      mapApi = CivicMap.create(el, { center: c, zoom: CENTERS[data.district] ? 12 : 7 });
+      const c = data.center || [22.9, 79.5, 5];
+      mapApi = CivicMap.create(el, { center: [c[0], c[1]], zoom: c[2] });
       if (!mapApi) return;
       const lg = $('#legend');
       lg.innerHTML = STAGES.map(([k]) => `<button type="button" class="mchip" data-s="${k}" style="--c:${CF.STATUS_COLOR[k]}"><i></i>${k}</button>`).join('');
@@ -165,7 +164,7 @@
   async function poll() {
     if (document.hidden) return;
     try {
-      const r = await fetch('/api/dashboard', { headers: { Accept: 'application/json' } });
+      const r = await fetch('/api/dashboard' + location.search, { headers: { Accept: 'application/json' } });
       if (!r.ok) return;
       const nd = await r.json();
       const s = JSON.stringify({ ...nd, server_time: 0 });

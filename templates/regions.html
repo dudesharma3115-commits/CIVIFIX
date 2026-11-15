@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% from "_m.html" import panel %}
+{% block title %}Districts & agencies · CivicFix{% endblock %}
+{% block heading %}Districts &amp; agencies{% endblock %}
+{% block content %}
+<div class="page-head boot"><div><span class="kicker">Coverage</span><h2>Districts &amp; agency names</h2>
+  <p>Keep the district list and the official department names correct for each state. The starter list covers all of India but district boundaries change, so please check it against your state's official list.</p></div>
+  {% if me.role == 'superadmin' %}<form method="get" class="state-filter"><label class="sr" for="sf">State</label><select id="sf" name="state" required><option value="">Choose a state</option>{% for s in states %}<option value="{{ s.code }}" {{ 'selected' if s.code == sel }}>{{ s.name }}</option>{% endfor %}</select><button class="btn btn-primary" type="submit">Open</button></form>{% endif %}
+</div>
+{% if not sel %}<div class="notice">Choose a state to manage its districts and agency names.</div>
+{% else %}
+<div class="two-col">
+  <section class="panel flush boot" style="--i:1">
+    <header class="panel-head tone-violet" style="background:linear-gradient(90deg,#2b6bd9,#7c3aed)">{{ icon('pin', 19) }}<h3>{{ dlist|length }} districts</h3></header>
+    <div class="scroll-x" style="max-height:560px;overflow:auto"><table class="tbl"><tbody>
+      {% for d in dlist %}<tr><td>{{ d.n }}</td><td class="muted">{% if d.lat is not none %}{{ '%.3f'|format(d.lat) }}, {{ '%.3f'|format(d.lng) }}{% else %}state centre{% endif %}</td>
+        <td style="text-align:right"><form method="post">{{ csrf_input() }}<input type="hidden" name="state" value="{{ sel }}"><input type="hidden" name="action" value="delete_district"><input type="hidden" name="name" value="{{ d.n }}"><button class="btn btn-danger btn-sm" type="submit" aria-label="Remove {{ d.n }}">Remove</button></form></td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  <div class="stack">
+    {% call panel('Add a district', 'violet', 'plus', i=2) %}
+      <form method="post">{{ csrf_input() }}<input type="hidden" name="state" value="{{ sel }}"><input type="hidden" name="action" value="add_district">
+        <label>District name<input name="name" required maxlength="100"></label>
+        <div class="form-grid"><label>Latitude <span class="optional">optional</span><input name="lat" inputmode="decimal" placeholder="e.g. 26.85"></label><label>Longitude <span class="optional">optional</span><input name="lng" inputmode="decimal" placeholder="e.g. 80.95"></label></div>
+        <button class="btn btn-primary btn-full" type="submit">Add district</button></form>
+    {% endcall %}
+    {% call panel('Official agency names', 'teal', 'building', i=3) %}
+      <p class="hint">Shown to citizens and officers in this state. Leave blank to use the generic name.</p>
+      <form method="post">{{ csrf_input() }}<input type="hidden" name="state" value="{{ sel }}"><input type="hidden" name="action" value="save_agencies">
+        {% for cat, g in generic.items() %}{% set cur = names.get(cat) %}
+        <label>{{ cat }}<div class="form-grid"><input name="name_{{ cat }}" value="{{ cur.name if cur else '' }}" placeholder="{{ g.name }}" maxlength="80" aria-label="Full name for {{ cat }}"><input name="short_{{ cat }}" value="{{ cur.short if cur else '' }}" placeholder="{{ g.short }}" maxlength="30" aria-label="Short name for {{ cat }}"></div></label>
+        {% endfor %}
+        <button class="btn btn-primary btn-full" type="submit">Save names</button></form>
+    {% endcall %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

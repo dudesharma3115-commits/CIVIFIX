@@ -3,12 +3,12 @@
 {% block pubcontent %}
 <section class="hero">
   <div>
-    <span class="kicker">Civic command center for Tamil Nadu</span>
-    <h1>Report a dead streetlight. <span>Watch TNEB fix it.</span></h1>
-    <p class="lead">Snap a photo and drop a pin. Your district admin verifies it, forwards it to the right department, and you follow every step live until it's fixed.</p>
+    <span class="kicker">Civic command center for India</span>
+    <h1>Report a broken streetlight. <span>Watch it get fixed.</span></h1>
+    <p class="lead">Snap a photo and drop a pin, in any state or district of India. Your district admin verifies it, forwards it to the right department (electricity board, water board, municipal body…), and you follow every step live until it's fixed.</p>
     <div class="hero-cta"><a class="btn btn-primary btn-lg" href="{{ url_for('register') }}">Report an issue {{ icon('arrow', 18) }}</a><a class="btn btn-ghost btn-lg" href="{{ url_for('login') }}">Sign in to the dashboard</a></div>
     <form class="track-box" action="{{ url_for('track') }}" method="get">{{ icon('search', 18) }}<input name="ticket" placeholder="Have a ticket number? e.g. CF-261109-AB12CD" aria-label="Ticket number" maxlength="30"><button class="btn btn-ghost btn-sm" type="submit">Track</button></form>
-    <div class="hero-stats"><div><b>{{ stats.reported }}</b><small>Reports</small></div><div><b>{{ stats.resolved }}</b><small>Resolved</small></div><div><b>{{ stats.districts }}</b><small>Districts</small></div></div>
+    <div class="hero-stats"><div><b>{{ stats.reported }}</b><small>Reports</small></div><div><b>{{ stats.resolved }}</b><small>Resolved</small></div><div><b>{{ stats.districts }}</b><small>Districts covered</small></div></div>
   </div>
   <div class="console" aria-hidden="true">
     <div class="console-top"><span>CITY COMMAND CENTER</span><span class="live-pill"><i></i> LIVE</span></div>
@@ -24,7 +24,7 @@
     </div>
     <div class="relay">
       <div style="--k:0">{{ icon('camera', 20) }}<b>Reported</b>by citizen</div><div style="--k:1">{{ icon('shield', 20) }}<b>Approved</b>by admin</div>
-      <div style="--k:2">{{ icon('bolt', 20) }}<b>TNEB</b>notified</div><div style="--k:3">{{ icon('check', 20) }}<b>Resolved</b>with proof</div>
+      <div style="--k:2">{{ icon('send', 20) }}<b>Department</b>notified</div><div style="--k:3">{{ icon('check', 20) }}<b>Resolved</b>with proof</div>
     </div>
   </div>
 </section>

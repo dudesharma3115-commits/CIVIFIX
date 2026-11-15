@@ -107,23 +107,27 @@
     /* ---------- report form ---------- */
     const rf = $('#reportForm');
     if (rf) {
-      const centers = window.__CENTERS__ || {};
-      const district = $('#districtSel'), lat = $('#latitude'), lng = $('#longitude'), status = $('#locStatus');
+      const stateSel = $('#stateSel'), district = $('#districtSel'), lat = $('#latitude'), lng = $('#longitude'), status = $('#locStatus');
       const hint = $('#routeHint');
-      $$('input[name=category]', rf).forEach(r => r.addEventListener('change', () => {
-        const a = CF.agencies[r.value];
+      const showHint = () => {
+        const r = $('input[name=category]:checked', rf);
+        if (!r) return;
+        const a = CFGeo.agency(stateSel.value, r.value);
         hint.hidden = false;
-        hint.innerHTML = `${CF.svg('send', 16)} Your district admin will review this, then forward it to <b>${CF.esc(a.name)}</b>.`;
-      }));
+        hint.innerHTML = `${CF.svg('send', 16)} Your district admin will review this, then forward it to <b>${CF.esc(a.name || r.value)}</b>.`;
+      };
+      $$('input[name=category]', rf).forEach(r => r.addEventListener('change', showHint));
       let picker = null;
-      const start = centers[district.value] || [11.1271, 78.6569];
+      const c0 = CFGeo.center(stateSel.value, district.value);
       if (window.CivicMap) {
         picker = CivicMap.picker($('#pickerMap'), {
-          center: start, zoom: centers[district.value] ? 12 : 7,
+          center: [c0[0], c0[1]], zoom: c0[2],
           onPick: (a, b) => { lat.value = a.toFixed(6); lng.value = b.toFixed(6); status.textContent = `Pinned at ${a.toFixed(4)}, ${b.toFixed(4)}`; }
         });
       }
-      district.addEventListener('change', () => { const c = centers[district.value]; if (c && picker) picker.flyTo(c, 12); });
+      const recenter = () => { const c = CFGeo.center(stateSel.value, district.value); if (picker) picker.flyTo([c[0], c[1]], c[2]); };
+      stateSel.addEventListener('geo-change', () => { recenter(); showHint(); });
+      district.addEventListener('change', recenter);
       const locate = $('#locateBtn');
       locate.addEventListener('click', () => {
         if (!navigator.geolocation) { CF.toast('Location is not available in this browser.', 'error'); return; }
@@ -195,11 +199,18 @@
   }
 })();
 
-/* admin: add-account form shows only the relevant fields */
+/* admin: add-account form shows only the relevant fields for the chosen role */
 document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('userForm');
+  if (!form) return;
   const role = document.getElementById('roleSel');
-  if (!role) return;
-  const d = document.getElementById('fDistrict'), p = document.getElementById('fDept');
-  const sync = () => { d.hidden = role.value === 'superadmin'; p.hidden = role.value !== 'staff'; };
-  role.addEventListener('change', sync); sync();
+  const st = document.getElementById('fState'), di = document.getElementById('fDistrict'), de = document.getElementById('fDept');
+  const sync = () => {
+    const r = role ? role.value : 'staff';
+    if (st) st.hidden = r === 'superadmin';
+    if (di) di.hidden = !(r === 'district_admin' || r === 'staff');
+    if (de) de.hidden = r !== 'staff';
+  };
+  if (role) role.addEventListener('change', sync);
+  sync();
 });

@@ -7,10 +7,12 @@
     {% if me.role == 'citizen' %}See what's happening near you, or report something new.
     {% elif me.role == 'staff' %}These are the cases forwarded to {{ agencies[me.department].name }}.
     {% elif me.role == 'district_admin' %}Approve reports and route them to the right department.
-    {% else %}Every district, department and case in one view.{% endif %}</p>
+    {% elif me.role == 'state_admin' %}Every district in {{ state_name }} at a glance.
+    {% else %}Every state, district and case in one view.{% endif %}</p>
   <div class="actions">
+    {% if me.role == 'superadmin' %}<form method="get" class="state-filter" action="{{ url_for('dashboard') }}"><label class="sr" for="sf">State</label><select id="sf" name="state"><option value="">All India</option>{% for s in states %}<option value="{{ s.code }}" {{ 'selected' if s.code == state_filter }}>{{ s.name }}</option>{% endfor %}</select><button class="btn btn-ghost" type="submit">Apply</button></form>{% endif %}
     {% if me.role == 'citizen' %}<a class="btn btn-primary" href="{{ url_for('new_complaint') }}">{{ icon('plus', 17) }} Report an issue</a>
-    {% elif me.role in ['district_admin','superadmin'] %}<a class="btn btn-primary" href="{{ url_for('complaints', status='Submitted') }}">{{ icon('shield', 17) }} Approval queue{% if pending_badge %} ({{ pending_badge }}){% endif %}</a>
+    {% elif me.role in admin_roles %}<a class="btn btn-primary" href="{{ url_for('complaints', status='Submitted') }}">{{ icon('shield', 17) }} Approval queue{% if pending_badge %} ({{ pending_badge }}){% endif %}</a>
     {% else %}<a class="btn btn-primary" href="{{ url_for('complaints') }}">{{ icon('wrench', 17) }} My cases</a>{% endif %}
   </div>
 </div>
@@ -39,7 +41,7 @@
     {% call panel('Service Level', 'teal', 'clock', sub='Resolution speed', i=3) %}
       <div class="gauge-row"><div id="gaugeRate" style="flex:1;text-align:center"></div><div id="ringSla"></div></div>
       <div id="deptRows"></div>
-      {% if me.role == 'superadmin' %}<span class="lbl" style="margin-top:14px">Busiest districts · resolved / total</span><div id="distRows"></div>{% endif %}
+      {% if me.role in ['superadmin','state_admin'] %}<span class="lbl" style="margin-top:14px">Busiest districts · resolved / total</span><div id="distRows"></div>{% endif %}
     {% endcall %}
     {% call panel('Critical Alerts', 'red', 'alert', sub='Needs attention', i=4) %}
       <div class="split"><div id="gaugeCrit" style="text-align:center"></div><div id="critSide" style="min-width:96px"></div></div>

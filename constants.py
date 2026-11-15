@@ -1,35 +1,30 @@
 """Reference data shared by the app, demo seed and templates."""
-DISTRICTS = [
-    "Chennai", "Chengalpattu", "Kancheepuram", "Tiruvallur", "Vellore",
-    "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Tirunelveli",
-    "Erode", "Thanjavur", "Thoothukudi", "Kanniyakumari", "Dindigul",
-]
-DISTRICT_CENTERS = {
-    "Chennai": (13.0827, 80.2707), "Chengalpattu": (12.6819, 79.9888),
-    "Kancheepuram": (12.8342, 79.7036), "Tiruvallur": (13.1439, 79.9087),
-    "Vellore": (12.9165, 79.1325), "Coimbatore": (11.0168, 76.9558),
-    "Madurai": (9.9252, 78.1198), "Tiruchirappalli": (10.7905, 78.7047),
-    "Salem": (11.6643, 78.1460), "Tirunelveli": (8.7139, 77.7567),
-    "Erode": (11.3410, 77.7172), "Thanjavur": (10.7870, 79.1378),
-    "Thoothukudi": (8.7642, 78.1348), "Kanniyakumari": (8.0883, 77.5385),
-    "Dindigul": (10.3673, 77.9803),
-}
+import json
+from pathlib import Path
+
+INDIA = json.loads((Path(__file__).resolve().parent / "data" / "india.json").read_text(encoding="utf-8"))
+STATES = [{"code": s["code"], "name": s["name"], "lat": s["lat"], "lng": s["lng"], "zoom": s["zoom"]} for s in INDIA["states"]]
+STATE_NAMES = {s["code"]: s["name"] for s in STATES}
+STATE_CENTER = {s["code"]: (s["lat"], s["lng"], s["zoom"]) for s in STATES}
+INDIA_CENTER = (22.9, 79.5, 5)
+ADMIN_ROLES = ("district_admin", "state_admin", "superadmin")
+
 DEPARTMENTS = ["Electricity", "Water Supply", "Roads & Highways", "Sanitation",
                "Public Health", "Parks & Public Spaces", "Other"]
 # Which agency handles which category (shown to users, used for routing).
-AGENCIES = {
-    "Electricity":           {"name": "TNEB · Electricity Board",   "short": "TNEB",         "icon": "bolt",     "color": "#ffb020"},
-    "Water Supply":          {"name": "TWAD / Metro Water",         "short": "Water Board",  "icon": "drop",     "color": "#38bdf8"},
-    "Roads & Highways":      {"name": "Highways & Roads Dept",      "short": "Highways",     "icon": "road",     "color": "#a78bfa"},
-    "Sanitation":            {"name": "Municipal Sanitation (SWM)", "short": "Sanitation",   "icon": "trash",    "color": "#34d399"},
-    "Public Health":         {"name": "Public Health Dept",         "short": "Health",       "icon": "pulse",    "color": "#fb7185"},
-    "Parks & Public Spaces": {"name": "Parks & Gardens Dept",       "short": "Parks",        "icon": "tree",     "color": "#4ade80"},
-    "Other":                 {"name": "District Collectorate",      "short": "Collectorate", "icon": "building", "color": "#94a3b8"},
+AGENCIES = {   # generic names; states can override name/short (e.g. TNEB in Tamil Nadu), see geo.agencies_for()
+    "Electricity":           {"name": "Electricity Department / DISCOM", "short": "Electricity",     "icon": "bolt",     "color": "#ffb020"},
+    "Water Supply":          {"name": "Water Supply Board",              "short": "Water",           "icon": "drop",     "color": "#38bdf8"},
+    "Roads & Highways":      {"name": "Public Works / Roads Dept",       "short": "Roads",           "icon": "road",     "color": "#a78bfa"},
+    "Sanitation":            {"name": "Municipal Sanitation (SWM)",      "short": "Sanitation",      "icon": "trash",    "color": "#34d399"},
+    "Public Health":         {"name": "Public Health Dept",              "short": "Health",          "icon": "pulse",    "color": "#fb7185"},
+    "Parks & Public Spaces": {"name": "Parks & Gardens Dept",            "short": "Parks",           "icon": "tree",     "color": "#4ade80"},
+    "Other":                 {"name": "District Administration",         "short": "District office", "icon": "building", "color": "#94a3b8"},
 }
 STATUSES = ["Submitted", "Approved", "Forwarded", "In Progress", "Resolved", "Rejected"]
 PRIORITIES = ["Low", "Medium", "High", "Critical"]
-ROLE_LABELS = {"citizen": "Citizen", "staff": "Department Officer",
-               "district_admin": "District Admin", "superadmin": "Super Admin"}
+ROLE_LABELS = {"citizen": "Citizen", "staff": "Department Officer", "district_admin": "District Admin",
+               "state_admin": "State Admin", "superadmin": "Super Admin"}
 
 # 24x24 stroke icons (rendered by the icon() template helper and by JS).
 ICONS = {

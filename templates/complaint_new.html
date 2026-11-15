@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% set use_map = true %}
+{% set use_map = true %}{% set use_geo = true %}
 {% block title %}Report an issue · CivicFix{% endblock %}
 {% block heading %}Report an issue{% endblock %}
 {% block page_class %}narrow{% endblock %}
@@ -22,9 +22,10 @@
 
   <div class="form-sec"><span class="num">3</span><div><b>Where is it?</b><small>Tap the map to drop a pin, or use your current location.</small></div></div>
   <div class="form-grid">
-    <label>District<select id="districtSel" name="district" required><option value="">Choose district</option>{% for d in districts %}<option {{ 'selected' if (request.form.get('district') or me.district) == d }}>{{ d }}</option>{% endfor %}</select></label>
-    <label>Area / locality<input name="area" placeholder="e.g. Adyar" value="{{ request.form.get('area', '') }}" required></label>
+    <label>State<select name="state" id="stateSel" required data-districts="#districtSel" data-preset="{{ request.form.get('state') or (me.state if me else '') or '' }}"><option value="">Choose state</option></select></label>
+    <label>District<select name="district" id="districtSel" required data-preset="{{ request.form.get('district') or (me.district if me else '') or '' }}"><option value="">Choose state first</option></select></label>
   </div>
+  <label>Area / locality<input name="area" placeholder="e.g. Adyar, Gomti Nagar, Koramangala" value="{{ request.form.get('area', '') }}" required></label>
   <label>Landmark or street <span class="optional">optional</span><input name="address" placeholder="Near the bus stop, opposite the school…" value="{{ request.form.get('address', '') }}"></label>
   <div class="picker" id="pickerMap"></div>
   <div class="picker-bar"><button class="btn btn-ghost btn-sm" type="button" id="locateBtn">{{ icon('locate', 16) }} Use my current location</button><span id="locStatus">No pin yet. The district centre is used if you skip this.</span></div>

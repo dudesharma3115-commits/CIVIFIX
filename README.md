@@ -1,5 +1,7 @@
 # CivicFix India
 
+**Covers all of India:** 36 states and union territories, ~777 districts, state-specific department names (TNEB in Tamil Nadu, UPPCL in Uttar Pradesh…), and five roles: Citizen, Department officer, District admin, **State admin**, Super admin.
+
 Citizens report civic issues with a photo and map pin. District admins approve and forward them to the right department (TNEB, Water Board, Highways…). Officers are notified, fix the issue and close it with proof. The citizen confirms the fix or reopens the case.
 
 ## 1. Try it on your PC (2 minutes)
@@ -8,7 +10,7 @@ Citizens report civic issues with a photo and map pin. District admins approve a
 pip install -r requirements.txt
 python app.py
 ```
-Open http://127.0.0.1:5000. Demo accounts (password `CivicFix@2026`) appear on the login page. Emails (OTP codes) print in the terminal when SMTP isn't set up.
+Open http://127.0.0.1:5000. Demo accounts (password `CivicFix@2026`) appear on the login page: Tamil Nadu (citizen, district admin, state admin, TNEB/Roads officers) and Uttar Pradesh (citizen, Lucknow district admin, state admin, UPPCL officer), plus `admin@civicfix.in` (Super admin). Emails (OTP codes) print in the terminal when SMTP isn't set up.
 
 Run the tests: `python -m unittest discover -s tests -v`
 
@@ -49,4 +51,14 @@ See `.env.example`. Production refuses to start without a 32+ character `CIVICFI
 
 ## Notes
 - The Postgres and Supabase Storage code paths could not be run against live services while this was built (only SQLite was exercised by the tests). Deploy first to a staging copy, create a test report with a photo, and check the *Audit log* and `/healthz` before announcing publicly.
-- Leaflet map scripts load from unpkg and fonts from Google, map tiles from CARTO's free service (fair-use limits). For heavy traffic, self-host Leaflet and use a paid tile provider.
+- The map uses OpenStreetMap tiles (no API key). OSM asks for light use only; for heavy traffic get a tile provider (MapTiler, Stadia, etc.) and set `CIVICFIX_TILE_URL` (and `CIVICFIX_TILE_ATTRIBUTION`; `CIVICFIX_TILE_DARK=0` if their style is already dark). Leaflet loads from unpkg and fonts from Google; consider self-hosting them later.
+
+## Coverage and data (important)
+- The state and district list in `data/india.json` is a **starter dataset**. Districts are created, merged and renamed often, so **check it against your state's official list** (for example the government's Local Government Directory) before launch.
+- Fix it without code: **Districts & agencies** page (Super admin for any state, State admin for their own) lets you add or remove districts and set the official agency names for a state.
+- Official agency names are pre-filled only for a few states (Electricity for TN, UP, MH, KL, WB, PB, KA; Water and Roads for TN). Every other state shows generic names ("Electricity Department / DISCOM") until you edit them.
+- Districts have no stored map centre by default, so the map opens on the state; citizens can still pin the exact spot or use GPS. You may add latitude/longitude per district on that page.
+- Upgrading an existing Tamil Nadu database is automatic: old users and reports are labelled TN.
+
+## Who does what
+Super admin: all states, creates state admins, edits regions. State admin: one state, creates district admins and officers. District admin: approves and forwards cases in a district. Officer: fixes cases forwarded to their department. Citizen: reports and tracks.

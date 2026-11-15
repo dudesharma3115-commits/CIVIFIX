@@ -21,10 +21,11 @@
   <a href="{{ url_for('new_complaint') }}" class="{{ 'active' if ep == 'new_complaint' }}" aria-label="Report an issue">{{ icon('plus', 22) }}<span class="tip">Report an issue</span></a>
   {% endif %}
   <a href="{{ url_for('complaints') }}" class="{{ 'active' if ep in ['complaints','complaint_detail'] and request.args.get('status') != 'Submitted' }}" aria-label="Reports">{{ icon('list', 22) }}<span class="tip">{% if me.role == 'citizen' %}My reports{% elif me.role == 'staff' %}My cases{% else %}All reports{% endif %}</span></a>
-  {% if me.role in ['district_admin','superadmin'] %}
+  {% if me.role in admin_roles %}
   <a href="{{ url_for('complaints', status='Submitted') }}" class="{{ 'active' if ep == 'complaints' and request.args.get('status') == 'Submitted' }}" aria-label="Approval queue">{{ icon('shield', 22) }}{% if pending_badge %}<span class="nbadge">{{ pending_badge }}</span>{% endif %}<span class="tip">Approval queue</span></a>
   <a href="{{ url_for('admin_departments') }}" class="{{ 'active' if ep == 'admin_departments' }}" aria-label="Departments">{{ icon('building', 22) }}<span class="tip">Departments</span></a>
-  <a href="{{ url_for('admin_users') }}" class="{{ 'active' if ep == 'admin_users' }}" aria-label="Team and users">{{ icon('users', 22) }}<span class="tip">{% if me.role == 'superadmin' %}Users &amp; roles{% else %}Department officers{% endif %}</span></a>
+  <a href="{{ url_for('admin_users') }}" class="{{ 'active' if ep == 'admin_users' }}" aria-label="Team and users">{{ icon('users', 22) }}<span class="tip">{% if me.role in ['superadmin','state_admin'] %}Users &amp; roles{% else %}Department officers{% endif %}</span></a>
+  {% if me.role in ['superadmin','state_admin'] %}<a href="{{ url_for('admin_regions') }}" class="{{ 'active' if ep == 'admin_regions' }}" aria-label="Regions and agencies">{{ icon('pin', 22) }}<span class="tip">Districts &amp; agencies</span></a>{% endif %}
   {% endif %}
   {% if me.role == 'superadmin' %}<a href="{{ url_for('admin_audit') }}" class="{{ 'active' if ep == 'admin_audit' }}" aria-label="Audit log">{{ icon('file', 22) }}<span class="tip">Audit log</span></a>{% endif %}
   <div class="grow"></div>
@@ -34,7 +35,7 @@
 <div class="shell">
   <header class="topbar">
     <form class="search" action="{{ url_for('complaints') }}" method="get" role="search">{{ icon('search', 18) }}<input name="q" placeholder="Search tickets, areas…" aria-label="Search reports" autocomplete="off"></form>
-    <div class="title-bar"><h1>{% block heading %}CivicFix — {{ me.district or 'Tamil Nadu' }} Command Center{% endblock %}</h1><small>{{ role_labels[me.role] }}{% if me.department %} · {{ agencies[me.department].short }}{% endif %}</small></div>
+    <div class="title-bar"><h1>{% block heading %}CivicFix — {{ me.district or state_name or 'India' }} Command Center{% endblock %}</h1><small>{{ role_labels[me.role] }}{% if me.department %} · {{ agencies[me.department].short }}{% endif %}</small></div>
     <div class="top-right">
       <span class="live-pill"><i></i> LIVE</span>
       <div style="position:relative">
@@ -60,10 +61,12 @@
   window.__FLASH__ = {{ get_flashed_messages(with_categories=true)|tojson }};
   window.__ICONS__ = {{ icons|tojson }};
   window.__AGENCIES__ = {{ agencies|tojson }};
-  window.__CENTERS__ = {{ centers|tojson }};
-  window.__TILES__ = {{ tiles|tojson }};
+{% if use_geo %}  window.__GEO__ = {{ geo|tojson }};
+  window.__GENERIC__ = {{ generic_agencies|tojson }};
+{% endif %}  window.__TILES__ = {{ tiles|tojson }};
 </script>
 {% if use_map %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endif %}
+{% if use_geo %}<script src="{{ url_for('static', filename='js/geo.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% if use_map %}<script src="{{ url_for('static', filename='js/map.js') }}"></script>{% endif %}
 {% block scripts %}{% endblock %}

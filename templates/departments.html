@@ -2,9 +2,9 @@
 {% block title %}Departments · CivicFix{% endblock %}
 {% block heading %}Departments{% endblock %}
 {% block content %}
-<div class="page-head boot"><div><span class="kicker">{{ me.district or 'All districts' }}</span><h2>Department performance</h2>
+<div class="page-head boot"><div><span class="kicker">{{ me.district or state_name or 'All India' }}</span><h2>Department performance</h2>
   <p>See who is holding open cases, who is fast, and where no officer is registered yet.</p></div>
-  <div class="actions"><a class="btn btn-ghost" href="{{ url_for('admin_users') }}">{{ icon('users', 17) }} Manage officers</a></div></div>
+  <div class="actions">{% if me.role == 'superadmin' %}<form method="get" class="state-filter"><label class="sr" for="sf">State</label><select id="sf" name="state"><option value="">All India</option>{% for s in states %}<option value="{{ s.code }}" {{ 'selected' if s.code == request.args.get('state') }}>{{ s.name }}</option>{% endfor %}</select><button class="btn btn-ghost" type="submit">Apply</button></form>{% endif %}<a class="btn btn-ghost" href="{{ url_for('admin_users') }}">{{ icon('users', 17) }} Manage officers</a></div></div>
 <section class="panel flush boot" style="--i:1"><div class="scroll-x"><table class="tbl">
   <thead><tr><th>Department</th><th class="num">Officers</th><th class="num">Open</th><th class="num">Critical</th><th class="num">Resolved</th><th class="num">Avg. fix time</th></tr></thead>
   <tbody>{% for s in stats %}<tr>

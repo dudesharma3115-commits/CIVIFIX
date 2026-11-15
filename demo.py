@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from werkzeug.security import generate_password_hash
 
-from constants import AGENCIES
+from geo import agency
 from db import insert
 from services import add_update, notify, ticket_id
 
@@ -13,22 +13,28 @@ def seed_demo(con):
     pw = generate_password_hash("CivicFix@2026")
     now = datetime.now()
 
-    def mk_user(name, email, role, district=None, department=None):
-        return insert(con, "INSERT INTO users(name,email,password_hash,role,district,department,created_at,email_verified,must_change_password) VALUES(?,?,?,?,?,?,?,1,0)",
-                      (name, email, pw, role, district, department, now.isoformat(timespec="seconds")))
+    def mk_user(name, email, role, district=None, department=None, state=None):
+        return insert(con, "INSERT INTO users(name,email,password_hash,role,district,department,created_at,state,email_verified,must_change_password) VALUES(?,?,?,?,?,?,?,?,1,0)",
+                      (name, email, pw, role, district, department, now.isoformat(timespec="seconds"),
+                       state or ("TN" if (district or role == "state_admin") else None)))
 
     mk_user("CivicFix Super Admin", "admin@civicfix.in", "superadmin")
+    mk_user("Tamil Nadu State Admin", "tn.state@civicfix.in", "state_admin", state="TN")
+    mk_user("Uttar Pradesh State Admin", "up.state@civicfix.in", "state_admin", state="UP")
     adm = {"Chennai": mk_user("Chennai District Admin", "chennai.admin@civicfix.in", "district_admin", "Chennai"),
-           "Coimbatore": mk_user("Coimbatore District Admin", "cbe.admin@civicfix.in", "district_admin", "Coimbatore")}
+           "Coimbatore": mk_user("Coimbatore District Admin", "cbe.admin@civicfix.in", "district_admin", "Coimbatore"),
+           "Lucknow": mk_user("Lucknow District Admin", "lucknow.admin@civicfix.in", "district_admin", "Lucknow", state="UP")}
     staff = {
         ("Chennai", "Roads & Highways"): mk_user("Chennai Roads Team", "roads.staff@civicfix.in", "staff", "Chennai", "Roads & Highways"),
         ("Chennai", "Electricity"): mk_user("TNEB Chennai Officer", "tneb.staff@civicfix.in", "staff", "Chennai", "Electricity"),
         ("Chennai", "Water Supply"): mk_user("Metro Water Chennai", "water.staff@civicfix.in", "staff", "Chennai", "Water Supply"),
         ("Chennai", "Sanitation"): mk_user("Chennai Sanitation Team", "sanitation.staff@civicfix.in", "staff", "Chennai", "Sanitation"),
         ("Coimbatore", "Electricity"): mk_user("TNEB Coimbatore Officer", "cbe.tneb@civicfix.in", "staff", "Coimbatore", "Electricity"),
+        ("Lucknow", "Electricity"): mk_user("UPPCL Lucknow Officer", "uppcl.staff@civicfix.in", "staff", "Lucknow", "Electricity", state="UP"),
     }
     cit = {"Chennai": mk_user("Demo Citizen", "citizen@civicfix.in", "citizen", "Chennai"),
-           "Coimbatore": mk_user("Arjun Kumar", "arjun@civicfix.in", "citizen", "Coimbatore")}
+           "Coimbatore": mk_user("Arjun Kumar", "arjun@civicfix.in", "citizen", "Coimbatore"),
+           "Lucknow": mk_user("Aman Verma", "aman@civicfix.in", "citizen", "Lucknow", state="UP")}
 
     # (title, description, category, district, area, lat, lng, final status, priority, days ago)
     S = [
@@ -47,6 +53,9 @@ def seed_demo(con):
         ("Street light flickering", "Light flickers all night, wrecking sleep for the whole lane.", "Electricity", "Coimbatore", "RS Puram", 11.0089, 76.9500, "Resolved", "Low", 4),
         ("Exposed junction box", "Open junction box with wires at ground level near the bus stop.", "Electricity", "Coimbatore", "Gandhipuram", 11.0183, 76.9725, "Forwarded", "Critical", 1),
         ("Garbage dumped on the roadside", "People are dumping waste at the corner, nobody collects it.", "Sanitation", "Coimbatore", "Peelamedu", 11.0250, 77.0020, "Submitted", "Medium", 0),
+        ("Street lights off on the main road", "Entire stretch is dark after 7 pm, women are afraid to walk.", "Electricity", "Lucknow", "Gomti Nagar", 26.8467, 81.0035, "In Progress", "High", 2),
+        ("Open transformer box near school", "The cover is missing and wires are exposed at child height.", "Electricity", "Lucknow", "Aliganj", 26.8935, 80.9460, "Forwarded", "Critical", 1),
+        ("Pothole on the bypass", "Large pothole causing accidents at night.", "Roads & Highways", "Lucknow", "Alambagh", 26.8120, 80.9010, "Submitted", "Medium", 0),
     ]
     rnd = random.Random(11)
     for title, desc, cat, dist, area, lat, lng, final, prio, days in S:
@@ -59,8 +68,8 @@ def seed_demo(con):
         admin = adm[dist]
         cid = insert(con,
             """INSERT INTO complaints(ticket,user_id,title,description,category,district,area,latitude,longitude,
-               status,priority,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (ticket_id(), cit[dist], title, desc, cat, dist, area, lat, lng, "Submitted", prio, t(0), t(0)))
+               status,priority,created_at,updated_at,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (ticket_id(), cit[dist], title, desc, cat, dist, area, lat, lng, "Submitted", prio, t(0), t(0), "UP" if dist == "Lucknow" else "TN"))
         add_update(con, cid, cit[dist], "Submitted", "Report submitted by citizen. Waiting for district approval.", t(0))
         if final == "Rejected":
             why = "Duplicate of an existing report already being handled."
@@ -73,9 +82,9 @@ def seed_demo(con):
         if final in ("Forwarded", "In Progress", "Resolved"):
             con.execute("UPDATE complaints SET status='Forwarded', forwarded_to=?, assigned_to=?, updated_at=? WHERE id=?",
                         (cat, officer, t(1.5), cid))
-            add_update(con, cid, admin, "Forwarded", f"Forwarded to {AGENCIES[cat]['name']}.", t(1.5))
+            add_update(con, cid, admin, "Forwarded", f"Forwarded to {agency('UP' if dist == 'Lucknow' else 'TN', cat)['name']}.", t(1.5))
             if officer:
-                notify(con, [officer], cid, f"{AGENCIES[cat]['short']}: new case — {title[:60]}", "action", t(1.5))
+                notify(con, [officer], cid, f"{agency('UP' if dist == 'Lucknow' else 'TN', cat)['short']}: new case — {title[:60]}", "action", t(1.5))
         if final in ("In Progress", "Resolved"):
             con.execute("UPDATE complaints SET status='In Progress', updated_at=? WHERE id=?", (t(4), cid))
             add_update(con, cid, officer or admin, "In Progress", "Team is on site and working on it.", t(4))
